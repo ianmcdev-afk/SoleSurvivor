@@ -1,7 +1,7 @@
 ; Inno Setup 6 script for Sole Survivor. Run via ..\publish.ps1 -Installer (passes AppVersion),
 ; or compile directly after publishing.
 #ifndef AppVersion
-  #define AppVersion "1.0.28"
+  #define AppVersion "1.0.30"
 #endif
 
 [Setup]

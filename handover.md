@@ -1,6 +1,16 @@
 # Sole Survivor: handover
 
-## Status: v1.0.28 (Build fix)
+## Status: v1.0.30 (Version in the window title)
+- The window title now includes the version ("Sole Survivor 1.0.30: Merriwick (Normal)"), as well as the title screen. A small change, made to test that Setup and publishing upgrade the existing install in place.
+
+## v1.0.29 (Publishing updates the installed game)
+- New `tools/update-install.ps1`, run by the `UpdateInstalledCopy` MSBuild target (`AfterTargets="Publish"`, single-file publishes on Windows only) in `SoleSurvivor.App.csproj`. So it runs from Visual Studio's Publish button and from `publish.ps1`.
+- It finds the install through the installer's AppId uninstall key (`{91792052-73D7-4F65-A185-2A01BD78DE90}_is1`, in HKCU or HKLM) and copies the new `SoleSurvivor.exe` over the installed one. It also updates `DisplayVersion` and `DisplayName` so Settings > Apps shows the new version.
+- **Safety:** it only writes to the registered install folder, and only if `SoleSurvivor.exe` is already there. It skips the copy if the exe is unchanged (hash match) or the game is running from that folder. It never elevates: an all-users install in Program Files needs VS or PowerShell run as admin, or the new Setup. It always exits 0 (`ContinueOnError`), so it never breaks a build.
+- **Opting out:** `-p:UpdateInstall=false`, or `.\publish.ps1 -NoInstallUpdate`.
+- The installer itself already upgrades in place (fixed AppId); Setup is still how you install on a new PC.
+
+## v1.0.28 (Build fix)
 - MC3074 in `RulesWindow.xaml`: `Text="{swarm}"` was parsed as a markup extension. It's now escaped as `Text="{}{swarm}"`, like the other placeholders. Any XAML attribute that starts with `{` needs the `{}` prefix.
 
 ## v1.0.27 (Tenth scenario: Merriwick, and the swarm)

@@ -15,4 +15,16 @@
   <ItemGroup>
     <ProjectReference Include="..\SoleSurvivor.Core\SoleSurvivor.Core.csproj" />
   </ItemGroup>
+
+  <!-- After every publish, copy the new exe over the installed copy (if Sole Survivor is installed), so there's
+       no need to run the new Setup. Turn off with -p:UpdateInstall=false. Never fails the build. -->
+  <Target Name="UpdateInstalledCopy" AfterTargets="Publish"
+          Condition="'$(OS)' == 'Windows_NT' And '$(UpdateInstall)' != 'false' And '$(PublishSingleFile)' == 'true'">
+    <PropertyGroup>
+      <_PublishedExe>$([System.IO.Path]::GetFullPath('$(PublishDir)$(AssemblyName).exe'))</_PublishedExe>
+      <_UpdateScript>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\tools\update-install.ps1'))</_UpdateScript>
+    </PropertyGroup>
+    <Exec Command="powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;$(_UpdateScript)&quot; -Exe &quot;$(_PublishedExe)&quot; -Version &quot;$(Version)&quot;"
+          ContinueOnError="true" />
+  </Target>
 </Project>

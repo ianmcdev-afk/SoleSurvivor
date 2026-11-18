@@ -2,14 +2,19 @@
 # Usage:  .\publish.ps1                     -> publish\win-x64\SoleSurvivor.exe
 #         .\publish.ps1 -Installer          -> also builds installer\Output\SoleSurvivor-Setup-<version>.exe
 #         .\publish.ps1 -Installer -Iscc "D:\Tools\Inno Setup 6\ISCC.exe"   (if Inno Setup is somewhere unusual)
+#         .\publish.ps1 -NoInstallUpdate        -> don't copy the new exe over the installed game
+# If Sole Survivor is installed, every publish also updates the installed copy in place (tools\update-install.ps1).
 param(
     [switch]$Installer,
-    [string]$Iscc
+    [string]$Iscc,
+    [switch]$NoInstallUpdate
 )
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
 
-dotnet publish src\SoleSurvivor.App\SoleSurvivor.App.csproj -p:PublishProfile=win-x64
+$extra = @()
+if ($NoInstallUpdate) { $extra += '-p:UpdateInstall=false' }
+dotnet publish src\SoleSurvivor.App\SoleSurvivor.App.csproj -p:PublishProfile=win-x64 @extra
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed" }
 Write-Host "Built: $PSScriptRoot\publish\win-x64\SoleSurvivor.exe" -ForegroundColor Green
 

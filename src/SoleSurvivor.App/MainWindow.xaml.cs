@@ -78,7 +78,8 @@ public partial class MainWindow : Window
         Anim.Set(PhaseBanner, OpacityProperty, 0);
         Anim.Set(FloodOverlay, OpacityProperty, 0);
         WalkMode.IsChecked = true;
-        Title = $"Sole Survivor: {_game.Scenario.Title} ({_game.Difficulty})";
+        var ver = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version;
+        Title = $"Sole Survivor{(ver is null ? "" : $" {ver.Major}.{ver.Minor}.{ver.Build}")}: {_game.Scenario.Title} ({_game.Difficulty})";
         ResetFigures();
         _stage = Stage.YourTurn;
         _planningHidden = false;
