@@ -132,9 +132,9 @@ public static class ActionCards
 {
     internal static readonly ActionCardDef[] Templates =
     [
-        new(CardEffect.Sprint,        "Sprint",          2, "Gain 3 free walks this turn.", 3),
-        new(CardEffect.Shepherd,      "Shepherd",        2, "Gain 2 free escorts this turn.", 3),
-        new(CardEffect.WildSwing,     "Wild Swing",      2, "Fight now: Horror dice +1, plus weapons.", 2),
+        new(CardEffect.Sprint,        "Sprint",          2, "Move up to 3 times this turn.", 3),
+        new(CardEffect.Shepherd,      "Shepherd",        2, "Escort up to 2 times this turn.", 3),
+        new(CardEffect.WildSwing,     "Wild Swing",      2, "Fight now: Horror dice +1, plus weapons.", 3),
         new(CardEffect.Rummage,       "Rummage",         1, "Search now: Horror dice +1, plus light.", 2),
         new(CardEffect.BarTheDoor,    "Bar the Door",    2, "{She} cannot enter your location next {round}.", 2),
         new(CardEffect.HoldBreath,    "Hold Your Breath",1, "Take 1 less damage if {she} attacks you next {round}.", 2),
@@ -142,25 +142,22 @@ public static class ActionCards
         new(CardEffect.SteelNerves,   "Steel Nerves",    1, "Gain 1 Hope.", 2),
         new(CardEffect.PatchUp,       "Patch Up",        2, "Heal 2, even with {her} beside you.", 2),
         new(CardEffect.Lure,          "Lure",            1, "{She} moves 1 step toward you.", 1),
-        new(CardEffect.DesperatePlan, "Desperate Plan",  3, "Fight now: Horror dice +2, plus weapons.", 1),
-        new(CardEffect.Scramble,      "Scramble",        0, "1 free walk.", 2),
-        new(CardEffect.Peek,          "Peek",            0, "Search now: Horror dice -1, plus light.", 2),
-        new(CardEffect.Holler,        "Holler",          0, "1 free escort.", 2),
+        new(CardEffect.DesperatePlan, "Desperate Plan",  3, "Fight now: Horror dice +2, plus weapons.", 2),
     ];
 
     internal static readonly ActionCardDef[] StarterTemplates =
     [
-        new(CardEffect.QuickStep,    "Quick Step",        0, "1 free walk.", 1),
-        new(CardEffect.Guide,        "Guide",             0, "1 free escort.", 1),
-        new(CardEffect.Shove,        "Shove",             0, "Fight now: Horror dice -1, plus weapons.", 1),
-        new(CardEffect.GlanceAround, "Glance Around",     0, "Search now: Horror dice -1, plus light.", 1),
-        new(CardEffect.CatchBreath,  "Catch Your Breath", 0, "Heal 1, if {she} isn't beside you.", 1),
+        new(CardEffect.QuickStep,    "Walk",              0, "Move 1 space.", 2),
+        new(CardEffect.Guide,        "Lead",              0, "Escort once: move 1 space with {victims} from here.", 1),
+        new(CardEffect.GlanceAround, "Search",            0, "Search now: Horror dice, plus light.", 1),
+        new(CardEffect.Shove,        "Weak Attack",       0, "Fight now: Horror dice -1, plus weapons.", 1),
+        new(CardEffect.CatchBreath,  "Rest",              0, "Heal 1, if {she} isn't beside you.", 1),
     ];
 
     /// <summary>The market deck, worded for the current scenario.</summary>
     public static IReadOnlyList<ActionCardDef> All => Scenarios.Current.ActionCards;
 
-    /// <summary>Free (cost 0) basic cards offered at the start of the game.</summary>
+    /// <summary>The zero-cost basics you start with: Walk x2, Lead, Search, Weak Attack, Rest.</summary>
     public static IReadOnlyList<ActionCardDef> Starters => Scenarios.Current.StarterCards;
 
     public static bool IsStarter(CardEffect e) => e >= CardEffect.QuickStep;
@@ -333,12 +330,12 @@ public static class EventCards
             "The {victim} nearest you becomes special (blue). If they reach the {sanctuary}: +2 extra Hope. If {she} kills them in your space, rage: +3 Time next round. If {she} kills them anywhere else: Dread +1.",
             "Discard when they are saved or killed."),
         (EventKind.Wounded, true, 0,
-            "The {victim} nearest you is badly hurt (orange). Escorting them costs 1 extra Time. If they reach the {sanctuary}: heal 2 and +1 extra Hope.",
+            "The {victim} nearest you is badly hurt (orange). Escorting them takes two escorts at once. If they reach the {sanctuary}: heal 2 and +1 extra Hope.",
             "Discard when they are saved or killed."),
         (EventKind.SecondWind, false, 1, "Heal 2.", null),
         (EventKind.Supplies, false, 1, "You find something useful: gain a random item.", null),
         (EventKind.Resolve, false, 1, "Dread -1 and +1 Hope.", null),
-        (EventKind.Adrenaline, true, 1, "+1 Time at the start of each round.", "Discard after 3 rounds."),
+        (EventKind.Adrenaline, true, 1, "+1 Time at the start of each turn.", "Discard after 3 rounds."),
         (EventKind.Trap, true, 1, "You rig a trap where you stand. The first time {killer} ends a move there, {she} takes 2 wounds.", "Discard when it springs."),
         (EventKind.MoreVictims, false, 0, "2 more {victims} turn up at the place farthest from {killer}.", null),
         (EventKind.BadOmen, false, -1, "Dread +1.", null),

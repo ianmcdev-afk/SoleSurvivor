@@ -2,6 +2,9 @@ namespace SoleSurvivor.Core;
 
 public enum Phase { SurvivorTurn, Won, Lost }
 
+/// <summary>Your turn has two steps, as in the board game: play cards (Action), then buy cards for next turn (Planning).</summary>
+public enum TurnStep { Action, Planning }
+
 public enum Difficulty { Easy, Normal, Hard }
 
 public enum LogKind { Info, Good, Bad, Tide, System }
@@ -53,7 +56,13 @@ public enum TideEventKind
     /// <summary>Something an event caused (a special victim died, an event ended). Text says what.</summary>
     EventNote,
     SurvivorDied,
-    FinaleBegins
+    FinaleBegins,
+    /// <summary>The swarm grew. To = where, Amount = how many appeared.</summary>
+    SwarmSpawned,
+    /// <summary>Part of the swarm moved one step. From/To, Amount = how many.</summary>
+    SwarmMoved,
+    /// <summary>The swarm attacked you. To = your location, Amount = damage (0 if you were protected).</summary>
+    SwarmBit
 }
 
 /// <summary>One step of the tide, in order, so the UI can animate it. From/To are location ids (-1 if unused).</summary>
@@ -82,36 +91,42 @@ public sealed record TideReport(
 /// </summary>
 public sealed class Game
 {
-    public const int MaxTime = 8;
-    public const int StartTime = 5;
+    /// <summary>Top of the Time track. Time resets to TimePerRound every turn; discards and events can push it higher.</summary>
+    public const int MaxTime = 12;
     public const int MaxDread = 8;
 
     public const int FinaleHealthBonus = 3;
     public const int HandLimit = 7;
-    public const int MarketSize = 5;
     /// <summary>Time gained by discarding a card from your hand.</summary>
     public const int DiscardRefund = 1;
     /// <summary>In the finale the killer hunts harder than the board says: +1 move and +1 damage.</summary>
     public const int FinaleMoveBonus = 1, FinaleDamageBonus = 1;
-    public const int StartingPicks = 3;
-
-    public const int CostMove = 1, CostEscort = 1, CostSearch = 2, CostFight = 2, CostRest = 2;
 
     private readonly Random _rng;
 
     private readonly int[] _villagers = new int[Board.Count];
+    /// <summary>How many of the swarm are at each location (always zero if the scenario has no swarm).</summary>
+    private readonly int[] _swarm = new int[Board.Count];
+    public IReadOnlyList<int> Swarm => _swarm;
+    public int SwarmTotal => _swarm.Sum();
+    public int SwarmHere => _swarm[SurvivorLocation];
+    /// <summary>How many of the swarm your last attack or item killed (for the UI).</summary>
+    public int LastSwarmKilled { get; private set; }
+
+    /// <summary>Damage the swarm does to you. They're brave in numbers: a lone one only hisses; 2-3 do 1, 4 or more do 2.</summary>
+    public static int SwarmDamage(int count) => count <= 1 ? 0 : count >= 4 ? 2 : 1;
     private readonly List<ItemKind>[] _stashes = new List<ItemKind>[Board.Count];
     private readonly List<ItemKind> _inventory = new();
-    private readonly List<ActionCardDef> _actionDeck = new();
-    private readonly List<ActionCardDef> _actionDiscard = new();
-    private readonly List<ActionCardDef> _market = new();
+    /// <summary>The Action Tableau: every card you can buy, in piles by name.</summary>
+    private readonly List<ActionCardDef> _tableau = new();
+    /// <summary>Cards played or discarded since the last Planning phase. They go back to the tableau when it ends.</summary>
+    private readonly List<ActionCardDef> _spent = new();
     private readonly List<ActionCardDef> _hand = new();
     private readonly List<TideCardDef> _tideDeck = new();
     private readonly List<EventCardDef> _eventDeck = new();
     private readonly List<ActiveEvent> _activeEvents = new();
     private readonly List<LogEntry> _log = new();
     private int _timeModNext;
-    private readonly List<ActionCardDef> _startingOffer = new(ActionCards.Starters);
 
     public int Seed { get; }
     public Difficulty Difficulty { get; }
@@ -126,7 +141,7 @@ public sealed class Game
     public int TidewifeLocation { get; private set; }
 
     public int Health { get; private set; }
-    public int Time { get; private set; } = StartTime;
+    public int Time { get; private set; }
     public int Hope { get; private set; } = 1;
     public int Dread { get; private set; }
     public int TidewifeHealth { get; private set; }
@@ -135,8 +150,12 @@ public sealed class Game
     public int VillagersSaved { get; private set; }
     public int VillagersLost { get; private set; }
 
+    /// <summary>Moves and escorts granted by cards you've played this Action phase. Lost when it ends.</summary>
     public int MoveTokens { get; private set; }
     public int EscortTokens { get; private set; }
+
+    /// <summary>Action phase (play cards) or Planning phase (buy cards).</summary>
+    public TurnStep Step { get; private set; } = TurnStep.Action;
 
     public bool Barricaded { get; private set; }
     public bool HoldingBreath { get; private set; }
@@ -152,7 +171,9 @@ public sealed class Game
 
     public IReadOnlyList<int> Villagers => _villagers;
     public IReadOnlyList<ItemKind> Inventory => _inventory;
-    public IReadOnlyList<ActionCardDef> Market => _market;
+    public IReadOnlyList<ActionCardDef> Tableau => _tableau;
+    /// <summary>Played or discarded since the last Planning phase: back in the tableau after this turn's planning.</summary>
+    public IReadOnlyList<ActionCardDef> SpentThisTurn => _spent;
     public IReadOnlyList<ActionCardDef> Hand => _hand;
     public IReadOnlyList<LogEntry> Log => _log;
     public int TideCardsLeft => _tideDeck.Count;
@@ -171,15 +192,15 @@ public sealed class Game
     public EventKind? SpecialVictimKind => Special?.Card.Kind;
     private int ActiveCount(EventKind k) => _activeEvents.Count(e => e.Card.Kind == k);
 
-    /// <summary>True until the player has chosen their free starting cards. No other action is allowed until then.</summary>
-    public bool AwaitingStartPick { get; private set; } = true;
-    public IReadOnlyList<ActionCardDef> StartingOffer => _startingOffer;
+    /// <summary>True until the night begins (after the briefing). Nothing can happen until then.</summary>
+    public bool AwaitingStart { get; private set; } = true;
+    public bool InPlanning => Phase == Phase.SurvivorTurn && !AwaitingStart && Pending is null && Step == TurnStep.Planning;
     public int StashCount(int location) => _stashes[location].Count;
     public int VillagersRemaining => _villagers.Sum();
 
     public bool IsOver => Phase != Phase.SurvivorTurn;
     public bool TidewifeHere => TidewifeLocation == SurvivorLocation;
-    public bool TidewifeNear => TidewifeHere || (Board.AreAdjacent(TidewifeLocation, SurvivorLocation) && !IsLocked(TidewifeLocation, SurvivorLocation));
+    public bool TidewifeNear => TidewifeHere || (Board.AreAdjacent(TidewifeLocation, SurvivorLocation) && KillerCanPass(TidewifeLocation, SurvivorLocation));
 
     /// <summary>A star (5 or 6) is a success. A 3 or 4 is a partial: discard 2 cards from your hand to make it a success.</summary>
     public int SuccessThreshold => 5;
@@ -237,11 +258,12 @@ public sealed class Game
         Difficulty = difficulty;
         (TimePerRound, SurvivorMaxHealth, TidewifeStartHealth) = difficulty switch
         {
-            Difficulty.Easy => (5, 6, 16),
-            Difficulty.Hard => (4, 5, 20),
-            _ => (5, 5, 19)
+            Difficulty.Easy => (6, 6, 20),
+            Difficulty.Hard => (4, 5, 25),
+            _ => (5, 5, 23)
         };
         TidewifeStartHealth += Scenario.Killer.HealthBonus;
+        Time = TimePerRound;
         Health = SurvivorMaxHealth;
         TidewifeHealth = TidewifeMaxHealth = TidewifeStartHealth;
 
@@ -250,11 +272,21 @@ public sealed class Game
             _villagers[loc.Id] = loc.StartVillagers;
             _stashes[loc.Id] = Shuffle(loc.Stash.ToList());
         }
+        if (Scenario.HasSwarm)
+        {
+            // The swarm starts spread over the lairs (never on you).
+            var lairs = Board.Locations.Where(l => l.IsLair && l.Id != SurvivorLocation).Select(l => l.Id).ToList();
+            if (lairs.Count == 0) lairs.Add(TidewifeLocation);
+            for (int i = 0; i < Scenario.SwarmStart; i++) _swarm[lairs[i % lairs.Count]]++;
+        }
 
+        // The tableau holds every buyable card; you start holding the zero-cost basics.
         foreach (var card in ActionCards.All)
             for (int i = 0; i < card.Copies; i++)
-                _actionDeck.Add(card);
-        Shuffle(_actionDeck);
+                _tableau.Add(card);
+        foreach (var card in ActionCards.Starters)
+            for (int i = 0; i < card.Copies; i++)
+                _hand.Add(card);
 
         _tideDeck.AddRange(TideCards.All);
         Shuffle(_tideDeck);
@@ -263,22 +295,16 @@ public sealed class Game
         Shuffle(_eventDeck);
 
         Write(LogKind.System, Scenario.Intro);
-        RefillMarket();
     }
 
-    /// <summary>Take exactly <see cref="StartingPicks"/> of the free starting cards into your hand.
-    /// Starting cards are single-use: once played (or left behind) they are gone.</summary>
-    public bool ChooseStartingCards(IReadOnlyCollection<int> indices)
+    /// <summary>Begin the night: reveal the opening event and start the first Action phase. Call once, after the briefing.</summary>
+    public bool Begin()
     {
-        if (!AwaitingStartPick || Phase != Phase.SurvivorTurn) return false;
-        var picked = indices.Distinct().ToList();
-        if (picked.Count != StartingPicks || picked.Any(i => i < 0 || i >= _startingOffer.Count)) return false;
-
-        foreach (int i in picked.OrderBy(i => i)) _hand.Add(_startingOffer[i]);
-        AwaitingStartPick = false;
-        Write(LogKind.Info, "You set out with " + string.Join(", ", picked.OrderBy(i => i).Select(i => _startingOffer[i].Name)) + ".");
-        // The opening event: one is always revealed at the start of the night.
+        if (!AwaitingStart || Phase != Phase.SurvivorTurn) return false;
+        AwaitingStart = false;
+        Write(LogKind.Info, "You set out with " + string.Join(", ", _hand.Select(c => c.Name)) + ".");
         RevealEvent();
+        Write(LogKind.System, $"Round 1. Action phase: play cards from your hand. You have {Time} Time to spend in Planning.");
         return true;
     }
 
@@ -300,7 +326,9 @@ public sealed class Game
 
     private static string Plural(int n, string one, string many) => n == 1 ? $"1 {one}" : $"{n} {many}";
 
-    private bool Acting => Phase == Phase.SurvivorTurn && !AwaitingStartPick && Pending is null;
+    /// <summary>The Action phase: play cards, move, use items.</summary>
+    private bool Acting => Phase == Phase.SurvivorTurn && !AwaitingStart && Pending is null && Step == TurnStep.Action;
+    public bool InAction => Acting;
 
     private DiceRoll Roll(string label, int dice, int threshold)
     {
@@ -371,32 +399,6 @@ public sealed class Game
         }
     }
 
-    private ActionCardDef? DrawActionCard()
-    {
-        if (_actionDeck.Count == 0)
-        {
-            if (_actionDiscard.Count == 0) return null;
-            _actionDeck.AddRange(_actionDiscard);
-            _actionDiscard.Clear();
-            Shuffle(_actionDeck);
-        }
-        var card = _actionDeck[^1];
-        _actionDeck.RemoveAt(_actionDeck.Count - 1);
-        return card;
-    }
-
-    private void RefillMarket()
-    {
-        _actionDiscard.AddRange(_market);
-        _market.Clear();
-        for (int i = 0; i < MarketSize; i++)
-        {
-            var card = DrawActionCard();
-            if (card is null) break;
-            _market.Add(card);
-        }
-    }
-
     // ------------------------------------------------------------------ doors, keys and vehicles
 
     private readonly HashSet<(int, int)> _unlocked = new();
@@ -406,6 +408,8 @@ public sealed class Game
     public bool IsLocked(int a, int b) => Scenario.IsLockedEdge(a, b) && !_unlocked.Contains(EdgeKey(a, b));
     public IEnumerable<(int A, int B)> LockedDoors => Scenario.LockedEdges.Where(e => IsLocked(e.A, e.B));
     private bool CanPass(int a, int b) => !IsLocked(a, b);
+    /// <summary>The killer's doors: locked ones stop {her} until the finale, when nothing does (no hiding behind a door forever).</summary>
+    private bool KillerCanPass(int a, int b) => InFinale || !IsLocked(a, b);
 
     public int Keys => _inventory.Count(i => i == ItemKind.Key);
     public bool HasVehicle => Scenario.VehicleRange >= 2 && _inventory.Contains(ItemKind.Vehicle);
@@ -478,31 +482,33 @@ public sealed class Game
 
     // ------------------------------------------------------------------ movement
 
+    /// <summary>Moving needs a move from a card you've played (Walk, Sprint...). There are no free moves.</summary>
     public bool CanMove(int to) =>
-        Acting && (MoveTokens > 0 || Time >= CostMove) && RouteTo(to) is not null;
+        Acting && MoveTokens > 0 && RouteTo(to) is not null;
 
     public bool Move(int to)
     {
         if (!CanMove(to)) return false;
         var route = RouteTo(to)!;
-        if (MoveTokens > 0) MoveTokens--; else Spend(CostMove);
+        MoveTokens--;
         Travel(route);
         Write(LogKind.Info, route.Count > 1 ? $"You {MoveWord(route)} to the {Name(to)}." : $"You walk to the {Name(to)}.");
         return true;
     }
 
-    /// <summary>Escorting costs 1, or 2 if the badly hurt special victim is with you.</summary>
-    public int EscortCost => CostEscort + (SpecialVictimAt == SurvivorLocation && SpecialVictimKind == EventKind.Wounded ? 1 : 0);
+    /// <summary>Escorts used by one escort from here: 1, or 2 if the badly hurt special victim is with you.</summary>
+    public int EscortCost => 1 + (SpecialVictimAt == SurvivorLocation && SpecialVictimKind == EventKind.Wounded ? 1 : 0);
 
+    /// <summary>Escorting needs escorts from a card you've played (Lead, Shepherd...).</summary>
     public bool CanEscort(int to) =>
         Acting && !InFinale && _villagers[SurvivorLocation] > 0
-        && (EscortTokens > 0 || Time >= EscortCost) && RouteTo(to) is not null;
+        && EscortTokens >= EscortCost && RouteTo(to) is not null;
 
     public bool Escort(int to)
     {
         if (!CanEscort(to)) return false;
         var route = RouteTo(to)!;
-        if (EscortTokens > 0) EscortTokens--; else Spend(EscortCost);
+        EscortTokens -= EscortCost;
         int from = SurvivorLocation;
         int count = Math.Min(EscortCapacity, _villagers[from]);
         bool special = SpecialVictimAt == from; // the special victim always comes with you
@@ -516,16 +522,6 @@ public sealed class Game
     }
 
     // ------------------------------------------------------------------ basic actions
-
-    public bool CanSearch => Acting && Time >= CostSearch && _stashes[SurvivorLocation].Count > 0;
-
-    public bool Search()
-    {
-        if (!CanSearch) return false;
-        Spend(CostSearch);
-        DoSearch(SearchDice(), "Search");
-        return true;
-    }
 
     private void DoSearch(int dice, string label)
     {
@@ -552,20 +548,33 @@ public sealed class Game
         }
     }
 
-    public bool CanFight => Acting && TidewifeHere && Time >= CostFight;
-
-    public bool Fight()
-    {
-        if (!CanFight) return false;
-        Spend(CostFight);
-        DoFight(FightDice(), "Fight");
-        return true;
-    }
-
+    /// <summary>
+    /// Fight whatever is in your space. With a swarm, each success kills one of them first (they shield the killer);
+    /// what's left over wounds the killer, if it's here.
+    /// </summary>
     private void DoFight(int dice, string label)
     {
         var roll = Roll(label, dice, SuccessThreshold);
-        Offer(roll, TidewifeHealth, "fight", successes => WoundTidewife(successes, label));
+        int useful = SwarmHere + (TidewifeHere ? TidewifeHealth : 0);
+        LastSwarmKilled = 0;
+        Offer(roll, useful, "fight", successes =>
+        {
+            successes -= KillSwarm(successes, label);
+            if (TidewifeHere) WoundTidewife(successes, label);
+            else if (successes == 0 && LastSwarmKilled == 0) Write(LogKind.Info, $"{label}: you miss.");
+        });
+    }
+
+    /// <summary>Kill up to <paramref name="count"/> of the swarm in your space. Returns how many died.</summary>
+    private int KillSwarm(int count, string source)
+    {
+        int killed = Math.Min(count, _swarm[SurvivorLocation]);
+        if (killed <= 0) return 0;
+        _swarm[SurvivorLocation] -= killed;
+        LastSwarmKilled += killed;
+        Write(LogKind.Good, $"{source}: you kill {Plural(killed, Scenario.SwarmName!, Scenario.SwarmNames)}"
+            + (_swarm[SurvivorLocation] > 0 ? $" ({_swarm[SurvivorLocation]} still here)." : "."));
+        return killed;
     }
 
     /// <summary>Resolve a roll now, or, if partials could be converted to something useful, wait for the player.</summary>
@@ -610,7 +619,7 @@ public sealed class Game
         {
             var card = _hand[i];
             _hand.RemoveAt(i);
-            if (!ActionCards.IsStarter(card.Effect)) _actionDiscard.Add(card);
+            _spent.Add(card);
             names.Add(card.Name);
         }
         var roll = pending.Roll with { Successes = pending.Roll.Successes + converted, ConvertedDice = dice.OrderBy(d => d).ToList() };
@@ -624,42 +633,48 @@ public sealed class Game
         return true;
     }
 
-    public bool CanRest => Acting && Time >= CostRest && Health < SurvivorMaxHealth && !TidewifeHere;
-
-    public bool Rest()
-    {
-        if (!CanRest) return false;
-        Spend(CostRest);
-        Heal(1, "You rest");
-        return true;
-    }
-
     // ------------------------------------------------------------------ cards
 
-    public bool CanBuy(int marketIndex) =>
-        Acting && marketIndex >= 0 && marketIndex < _market.Count && _hand.Count < HandLimit && Time >= _market[marketIndex].Cost;
+    /// <summary>
+    /// Planning phase: buy a card from the tableau with Time (its cost). Zero-cost cards are always free to take.
+    /// Cards you played or discarded this turn aren't in the tableau until Planning ends. Hand limit applies.
+    /// </summary>
+    public bool CanBuy(ActionCardDef card) =>
+        InPlanning && _hand.Count < HandLimit && _tableau.Contains(card) && Time >= card.Cost;
 
-    public bool Buy(int marketIndex)
+    /// <summary>Why a tableau card can't be bought right now, or null if it can.</summary>
+    public string? BuyBlockedReason(ActionCardDef card)
     {
-        if (!CanBuy(marketIndex)) return false;
-        var card = _market[marketIndex];
+        if (!InPlanning) return "buy in the Planning phase";
+        if (!_tableau.Contains(card)) return _spent.Contains(card) ? "used this turn" : "none left";
+        if (_hand.Count >= HandLimit) return "hand full";
+        if (Time < card.Cost) return "not enough Time";
+        return null;
+    }
+
+    /// <summary>How many of this card are in the tableau now.</summary>
+    public int TableauCount(ActionCardDef card) => _tableau.Count(c => ReferenceEquals(c, card));
+
+    public bool Buy(ActionCardDef card)
+    {
+        if (!CanBuy(card)) return false;
         Spend(card.Cost);
-        _market.RemoveAt(marketIndex);
+        _tableau.Remove(card);
         _hand.Add(card);
-        Write(LogKind.Info, $"You take {card.Name} into your hand.");
+        Write(LogKind.Info, card.Cost == 0 ? $"You take {card.Name} back into your hand." : $"You buy {card.Name} for {card.Cost} Time.");
         return true;
     }
 
-    /// <summary>A card in hand can be thrown away for +1 Time, as long as that Time isn't wasted at the cap.</summary>
+    /// <summary>Any time on your turn (Action or Planning), a card in hand can be thrown away for +1 Time.</summary>
     public bool CanDiscard(int handIndex) =>
-        Acting && handIndex >= 0 && handIndex < _hand.Count && Time < MaxTime;
+        (Acting || InPlanning) && handIndex >= 0 && handIndex < _hand.Count && Time < MaxTime;
 
     public bool Discard(int handIndex)
     {
         if (!CanDiscard(handIndex)) return false;
         var card = _hand[handIndex];
         _hand.RemoveAt(handIndex);
-        if (!ActionCards.IsStarter(card.Effect)) _actionDiscard.Add(card); // starting cards don't recycle
+        _spent.Add(card);
         Time = Math.Min(MaxTime, Time + DiscardRefund);
         Write(LogKind.Info, $"You discard {card.Name} for +{DiscardRefund} Time.");
         return true;
@@ -670,7 +685,7 @@ public sealed class Game
         if (!Acting || handIndex < 0 || handIndex >= _hand.Count) return false;
         return _hand[handIndex].Effect switch
         {
-            CardEffect.WildSwing or CardEffect.DesperatePlan => TidewifeHere,
+            CardEffect.WildSwing or CardEffect.DesperatePlan => TidewifeHere || SwarmHere > 0,
             CardEffect.Rummage => _stashes[SurvivorLocation].Count > 0,
             CardEffect.BarTheDoor => !TidewifeHere && !Barricaded,
             CardEffect.HoldBreath => !HoldingBreath,
@@ -680,8 +695,9 @@ public sealed class Game
             CardEffect.Shepherd => !InFinale,
             CardEffect.Guide or CardEffect.Holler => !InFinale,
             CardEffect.Peek => _stashes[SurvivorLocation].Count > 0,
-            CardEffect.Shove => TidewifeHere,
+            CardEffect.Shove => TidewifeHere || SwarmHere > 0,
             CardEffect.GlanceAround => _stashes[SurvivorLocation].Count > 0,
+            CardEffect.QuickStep => true,
             CardEffect.CatchBreath => Health < SurvivorMaxHealth && !TidewifeHere,
             _ => true
         };
@@ -692,17 +708,17 @@ public sealed class Game
         if (!CanPlay(handIndex)) return false;
         var card = _hand[handIndex];
         _hand.RemoveAt(handIndex);
-        if (!ActionCards.IsStarter(card.Effect)) _actionDiscard.Add(card); // starting cards don't recycle
+        _spent.Add(card); // back in the tableau once this turn's Planning ends
 
         switch (card.Effect)
         {
             case CardEffect.Sprint:
                 MoveTokens += 3;
-                Write(LogKind.Info, "Sprint: 3 free walks.");
+                Write(LogKind.Info, "Sprint: up to 3 moves. Click where to go.");
                 break;
             case CardEffect.Shepherd:
                 EscortTokens += 2;
-                Write(LogKind.Info, "Shepherd: 2 free escorts.");
+                Write(LogKind.Info, "Shepherd: up to 2 escorts.");
                 break;
             case CardEffect.WildSwing:
                 DoFight(FightDice(+1), card.Name);
@@ -745,26 +761,28 @@ public sealed class Game
             case CardEffect.QuickStep:
             case CardEffect.Scramble:
                 MoveTokens += 1;
-                Write(LogKind.Info, $"{card.Name}: 1 free walk.");
+                Write(LogKind.Info, $"{card.Name}: 1 move. Click where to go.");
                 break;
             case CardEffect.Guide:
             case CardEffect.Holler:
                 EscortTokens += 1;
-                Write(LogKind.Info, $"{card.Name}: 1 free escort.");
+                Write(LogKind.Info, $"{card.Name}: 1 escort.");
                 break;
             case CardEffect.Shove:
                 DoFight(FightDice(-1), card.Name);
                 break;
             case CardEffect.GlanceAround:
+                DoSearch(SearchDice(), card.Name);
+                break;
             case CardEffect.Peek:
                 DoSearch(SearchDice(-1), card.Name);
                 break;
             case CardEffect.CatchBreath:
-                Heal(1, "Catch Your Breath");
+                Heal(1, card.Name);
                 break;
             case CardEffect.Lure:
             {
-                var path = Board.Path(TidewifeLocation, SurvivorLocation, null, CanPass);
+                var path = Board.Path(TidewifeLocation, SurvivorLocation, null, KillerCanPass);
                 if (path is { Count: > 0 })
                 {
                     TidewifeLocation = path[0];
@@ -785,12 +803,14 @@ public sealed class Game
         var kind = _inventory[inventoryIndex];
         if (!Items.All[kind].Consumable) return null;
         if (IsOver) return "the night is over";
-        if (AwaitingStartPick) return "choose your cards first";
+        if (AwaitingStart) return "the night hasn't started";
+        if (Step == TurnStep.Planning) return "only in your Action phase";
         if (Pending is not null) return "finish your roll first";
         string killer = Scenario.Killer.ShortName;
         return kind switch
         {
-            ItemKind.FlareGun or ItemKind.BlessedSalt when !TidewifeNear => $"needs {killer} here or next door",
+            ItemKind.FlareGun when !TidewifeNear && SwarmHere == 0 => Scenario.HasSwarm ? $"needs {killer} or {Scenario.SwarmNames} nearby" : $"needs {killer} here or next door",
+            ItemKind.BlessedSalt when !TidewifeNear => $"needs {killer} here or next door",
             ItemKind.Bandages when Health >= SurvivorMaxHealth => "you're at full health",
             ItemKind.IronNails when TidewifeHere => $"not with {killer} here",
             ItemKind.IronNails when Barricaded => "door already barred",
@@ -803,7 +823,7 @@ public sealed class Game
         if (!Acting || inventoryIndex < 0 || inventoryIndex >= _inventory.Count) return false;
         return _inventory[inventoryIndex] switch
         {
-            ItemKind.FlareGun => TidewifeNear,
+            ItemKind.FlareGun => TidewifeNear || SwarmHere > 0,
             ItemKind.BlessedSalt => TidewifeNear,
             ItemKind.Bandages => Health < SurvivorMaxHealth,
             ItemKind.IronNails => !TidewifeHere && !Barricaded,
@@ -819,7 +839,9 @@ public sealed class Game
         switch (item)
         {
             case ItemKind.FlareGun:
-                WoundTidewife(2, Items.All[ItemKind.FlareGun].Name);
+                LastSwarmKilled = 0;
+                KillSwarm(2, Items.All[ItemKind.FlareGun].Name); // with a swarm, the flare also burns up to 2 of them here
+                if (TidewifeNear) WoundTidewife(2, Items.All[ItemKind.FlareGun].Name);
                 break;
             case ItemKind.BlessedSalt:
                 Repelled = true;
@@ -852,11 +874,26 @@ public sealed class Game
         }
     }
 
-    public bool CanEndTurn => Acting;
+    /// <summary>End the Action phase and move on to Planning. Unused moves and escorts are lost.</summary>
+    public bool CanEndActions => Acting;
+
+    public void EndActions()
+    {
+        if (!Acting) return;
+        Step = TurnStep.Planning;
+        MoveTokens = 0;
+        EscortTokens = 0;
+        Write(LogKind.System, $"Planning phase: buy cards for next turn with your {Time} Time. Unspent Time is lost.");
+    }
+
+    /// <summary>End Planning: Time resets, cards used this turn go back to the tableau, and the killer takes a turn.</summary>
+    public bool CanEndTurn => InPlanning;
 
     public void EndTurn()
     {
-        if (!Acting) return;
+        if (!InPlanning) return;
+        _tableau.AddRange(_spent);
+        _spent.Clear();
         ResolveTide();
         if (Phase == Phase.SurvivorTurn) StartRound();
     }
@@ -864,16 +901,16 @@ public sealed class Game
     private void StartRound()
     {
         Round++;
-        Time = Math.Clamp(Time + TimePerRound + _timeModNext, 0, MaxTime);
+        Time = Math.Clamp(TimePerRound + _timeModNext, 0, MaxTime);
         _timeModNext = 0;
+        Step = TurnStep.Action;
         FogThisTurn = FogNextTurn;
         FogNextTurn = false;
         MoveTokens = 0;
         EscortTokens = 0;
         SteelYourself = false;
         TickEvents();
-        RefillMarket();
-        Write(LogKind.System, $"Round {Round}. You have {Time} Time.");
+        Write(LogKind.System, $"Round {Round}. Action phase: play cards from your hand. {Time} Time for Planning.");
     }
 
     private void ResolveTide()
@@ -963,6 +1000,8 @@ public sealed class Game
             if (TidewifeHere) hits = StrikeSurvivor(damage);
         }
 
+        if (Scenario.HasSwarm && Phase == Phase.SurvivorTurn) ResolveSwarm(blocked, finaleTide, attacks);
+
         bool revealsEvent = false;
         if (!finaleTide && _lastCard is { } drawn && Phase == Phase.SurvivorTurn)
         {
@@ -986,6 +1025,66 @@ public sealed class Game
     }
 
     private TideCardDef? _lastCard;
+
+    /// <summary>
+    /// The swarm's turn, after the killer's: every group creeps one step toward you, then on an attack card the killer
+    /// spawns more where it stands, and any on you nip for small damage.
+    /// </summary>
+    private void ResolveSwarm(int? blocked, bool finale, bool cardAttacks)
+    {
+        string one = Scenario.SwarmName!, many = Scenario.SwarmNames;
+        // Each group moves at once, from where it stood at the start of the swarm's move.
+        var start = _swarm.ToArray();
+        for (int from = 0; from < start.Length; from++)
+        {
+            int n = start[from];
+            if (n == 0 || from == SurvivorLocation) continue;
+            var path = Board.Path(from, SurvivorLocation, null, KillerCanPass);
+            if (path is not { Count: > 0 }) continue;
+            int to = path[0];
+            if (to == blocked) continue; // a barred door keeps them out too
+            _swarm[from] -= n;
+            _swarm[to] += n;
+            Emit(TideEventKind.SwarmMoved, null, from: from, to: to, amount: n);
+        }
+
+        // Then she spawns more where she stands, but only on cards where she attacks (and every turn of the finale).
+        // New ones don't move until next time.
+        int spawn = cardAttacks ? Math.Min(Scenario.SwarmSpawn + (finale ? 1 : 0), Scenario.SwarmMax - SwarmTotal) : 0;
+        if (spawn > 0)
+        {
+            _swarm[TidewifeLocation] += spawn;
+            Emit(TideEventKind.SwarmSpawned, $"{Plural(spawn, one, many)} {(spawn == 1 ? "crawls" : "crawl")} out at the {Name(TidewifeLocation)}.",
+                to: TidewifeLocation, amount: spawn);
+        }
+
+        int here = _swarm[SurvivorLocation];
+        if (here == 0) return;
+        if (here == 1)
+        {
+            Emit(TideEventKind.SwarmBit, $"A lone {one} hisses at you from under a car, but won't come at you on its own.", to: SurvivorLocation, amount: 0);
+            return;
+        }
+        if (Repelled)
+        {
+            Emit(TideEventKind.SwarmBit, $"The {many} circle you, but won't come close.", to: SurvivorLocation, amount: 0);
+            return;
+        }
+        int damage = Math.Max(0, SwarmDamage(here) - (HoldingBreath ? 1 : 0));
+        if (damage == 0)
+        {
+            Emit(TideEventKind.SwarmBit, $"The {many} {Scenario.SwarmBite}, but you keep still and they lose interest.", to: SurvivorLocation, amount: 0);
+            return;
+        }
+        Health = Math.Max(0, Health - damage);
+        string who = $"{here} {many} {Scenario.SwarmBite}";
+        Emit(TideEventKind.SwarmBit, $"{who} for {damage}. Health {Health}.", to: SurvivorLocation, amount: damage);
+        if (Health == 0)
+        {
+            Phase = Phase.Lost;
+            Emit(TideEventKind.SurvivorDied, Scenario.LoseText, to: SurvivorLocation);
+        }
+    }
 
     // ------------------------------------------------------------------ events
 
@@ -1019,7 +1118,7 @@ public sealed class Game
                 _activeEvents.Add(new ActiveEvent { Card = card, Location = best });
                 result = card.Kind == EventKind.Companion
                     ? $"A {Scenario.Victim} at the {Name(best)} sticks close to you. Get them to the {Scenario.SanctuaryName}."
-                    : $"A {Scenario.Victim} at the {Name(best)} is badly hurt. Escorting them costs 1 extra Time.";
+                    : $"A {Scenario.Victim} at the {Name(best)} is badly hurt. Escorting them takes two escorts at once.";
                 break;
             }
             case EventKind.SecondWind:
@@ -1063,7 +1162,7 @@ public sealed class Game
                 for (int i = 0; i < Board.Count; i++)
                 {
                     if (Board.Locations[i].IsSanctuary || i == TidewifeLocation) continue;
-                    int d = Board.Distance(TidewifeLocation, i, null, CanPass);
+                    int d = Board.Distance(TidewifeLocation, i, null, KillerCanPass);
                     if (d != int.MaxValue && d > farDist) { far = i; farDist = d; }
                 }
                 if (far < 0) break;
@@ -1245,7 +1344,7 @@ public sealed class Game
         for (int i = 0; i < Board.Count; i++)
         {
             if (_villagers[i] == 0) continue;
-            int d = Board.Distance(TidewifeLocation, i, blocked, CanPass);
+            int d = Board.Distance(TidewifeLocation, i, blocked, KillerCanPass);
             if (d == int.MaxValue) continue;
             if (d < bestDist || (d == bestDist && _villagers[i] > _villagers[best]))
             {
@@ -1263,7 +1362,7 @@ public sealed class Game
         {
             if (TidewifeLocation == SurvivorLocation) break;
             if (!huntingSurvivor && _villagers[TidewifeLocation] > 0) break;
-            var path = Board.Path(TidewifeLocation, target, blocked, CanPass);
+            var path = Board.Path(TidewifeLocation, target, blocked, KillerCanPass);
             if (path is null || path.Count == 0)
             {
                 if (blocked.HasValue && Board.AreAdjacent(TidewifeLocation, blocked.Value))

@@ -28,7 +28,8 @@ public partial class MainWindow
     private void HideBriefing()
     {
         BriefingOverlay.Visibility = Visibility.Collapsed;
-        Render(); // brings up the starting-card picker if the night hasn't begun yet
+        Render();
+        if (_game.AwaitingStart) BeginNight();
     }
 
     private void ShowBriefing()
@@ -45,8 +46,8 @@ public partial class MainWindow
         BriefGoals.Children.Clear();
         int out_ = g.VillagersRemaining;
         AddGoal("★", Art.Accent, $"Rescue the {victims}",
-            $"Lead them to the {safe}, where they are safe. {(g.Round == 1 && g.AwaitingStartPick ? $"There are {out_} out there tonight" : $"{out_} still out there, {g.VillagersSaved} saved so far")}. "
-            + $"Walk to them, switch to Escort, and bring up to {g.EscortCapacity} at a time. Each one saved gives you 1 Hope.");
+            $"Lead them to the {safe}, where they are safe. {(g.Round == 1 && g.AwaitingStart ? $"There are {out_} out there tonight" : $"{out_} still out there, {g.VillagersSaved} saved so far")}. "
+            + $"Play Walk to reach them, then Lead (or Shepherd) to escort up to {g.EscortCapacity} at a time. Each one saved gives you 1 Hope.");
         AddGoal("⚔", Art.Danger, $"Defeat {sc.Killer.NameLower}",
             $"This is how you win: wound {sc.Killer.Her} until {sc.Killer.Her} health reaches 0 ({g.TidewifeHealth} now). "
             + $"Find weapons first. Every {sc.Victim} {sc.Killer.SheLower} kills makes {sc.Killer.Her} stronger, so rescues matter.");
@@ -56,13 +57,17 @@ public partial class MainWindow
 
         var notes = new List<string>();
         if (sc.LockedEdges.Length > 0)
-            notes.Add($"Padlocks mark locked doors. Nobody gets through, {sc.Killer.NameLower} included, until you walk through carrying a {sc.KeyName}.");
+            notes.Add($"Padlocks mark locked doors. Nobody gets through, {sc.Killer.NameLower} included, until you walk through carrying a {sc.KeyName} (or the {sc.FinaleName} begins).");
+        if (sc.HasSwarm)
+            notes.Add($"{sc.Killer.Name} isn't alone. On each {sc.RoundWord} where {sc.Killer.SheLower} attacks, a {sc.SwarmName} crawls out where {sc.Killer.SheLower} stands (at most {sc.SwarmMax}). "
+                + $"Every {sc.RoundWord} they all creep one step towards you. One on its own only hisses; two or three nip you for 1, four or more for 2. "
+                + $"Attack cards kill one per success, and they shield {sc.Killer.Her}: in {sc.Killer.Her} space, the {sc.SwarmNames} die first.");
         if (sc.VehicleName is not null)
             notes.Add($"Find the {sc.VehicleName} to move up to {sc.VehicleRange} spaces at a time.");
         BriefNote.Text = string.Join(" ", notes);
         BriefNote.Visibility = notes.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
 
-        BriefContinue.Content = g.AwaitingStartPick ? "Got it: choose your starting cards" : "Back to the night";
+        BriefContinue.Content = g.AwaitingStart ? "Got it: begin the night" : "Back to the night";
         BriefMapTitle.Text = $"Bring the {victims} to the {safe}";
         DrawBriefingMap();
 
@@ -72,10 +77,11 @@ public partial class MainWindow
         AddLegend(Art.Hex("#7FD8C4"), "┅", "Route to safety");
         AddLegend(Art.Warm, "●", "You");
         AddLegend(Art.Danger, "☠", sc.Killer.Name);
+        if (sc.HasSwarm) AddLegend(Art.Hex("#BFD8FF"), "●●", char.ToUpperInvariant(sc.SwarmNames[0]) + sc.SwarmNames[1..]);
         if (g.LockedDoors.Any()) AddLegend(Art.Warm, "⚿", "Locked door");
 
         BriefingOverlay.Visibility = Visibility.Visible;
-        StartPickOverlay.Visibility = Visibility.Collapsed;
+        PlanningOverlay.Visibility = Visibility.Collapsed;
         BriefingOverlay.Opacity = 0;
         _ = Anim.To(BriefingOverlay, OpacityProperty, 1, 260);
     }

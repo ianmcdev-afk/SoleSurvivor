@@ -43,6 +43,73 @@ public partial class MainWindow
         return new Point(start + index * 14, Board.Locations[id].Y + 66);
     }
 
+    /// <summary>Feet position of the n-th of the swarm at a location (bottom right, beside any waiting victims).</summary>
+    private static Point SwarmFeet(int id, int index) =>
+        new(Board.Locations[id].X + 30 + index % 3 * 13 + index / 3 * 6, Board.Locations[id].Y + 68 - index / 3 * 9);
+
+    /// <summary>What the board shows of the swarm while the killer's turn plays out (null = the game's real counts).</summary>
+    private int[]? _swarmShown;
+    private readonly List<FrameworkElement> _swarmFigures = new();
+
+    /// <summary>Draw the swarm: up to 6 figures per location, plus a count if there are more.</summary>
+    private void DrawSwarm()
+    {
+        foreach (var f in _swarmFigures) InfoLayer.Children.Remove(f);
+        _swarmFigures.Clear();
+        if (!_game.Scenario.HasSwarm) return;
+        var counts = _swarmShown ?? _game.Swarm.ToArray();
+        for (int id = 0; id < counts.Length; id++)
+        {
+            for (int i = 0; i < Math.Min(counts[id], 6); i++)
+            {
+                var f = Art.SwarmFigure(_game.Scenario.Id);
+                f.Root.IsHitTestVisible = false;
+                Place(f, SwarmFeet(id, i));
+                Anim.Loop(f.Bob, TranslateTransform.YProperty, 0, -1.5, 180 + (id * 7 + i * 31) % 90);
+                InfoLayer.Children.Add(f.Root);
+                _swarmFigures.Add(f.Root);
+            }
+            if (counts[id] > 0)
+            {
+                var badge = new TextBlock
+                {
+                    Text = $"×{counts[id]}", FontSize = 11, FontWeight = FontWeights.Bold, Foreground = Art.Hex("#BFD8FF"), IsHitTestVisible = false,
+                    ToolTip = $"{counts[id]} {(counts[id] == 1 ? _game.Scenario.SwarmName : _game.Scenario.SwarmNames)}"
+                };
+                Canvas.SetLeft(badge, Board.Locations[id].X + 70);
+                Canvas.SetTop(badge, Board.Locations[id].Y + 54);
+                InfoLayer.Children.Add(badge);
+                _swarmFigures.Add(badge);
+            }
+        }
+    }
+
+    /// <summary>Part of the swarm scuttling from one place to the next.</summary>
+    private async Task SwarmMoveAsync(int from, int to, int count)
+    {
+        var tasks = new List<Task>();
+        for (int i = 0; i < Math.Min(count, 6); i++)
+        {
+            var f = Art.SwarmFigure(_game.Scenario.Id);
+            f.Root.IsHitTestVisible = false;
+            Place(f, SwarmFeet(from, i));
+            FxLayer.Children.Add(f.Root);
+            Anim.Loop(f.Bob, TranslateTransform.YProperty, 0, -2.5, 90);
+            var end = SwarmFeet(to, i);
+            tasks.Add(ScuttleAsync(f, end, i * 60));
+        }
+        await Task.WhenAll(tasks);
+
+        async Task ScuttleAsync(Art.Figure f, Point end, double delay)
+        {
+            await Anim.Wait(delay);
+            await Task.WhenAll(
+                Anim.To(f.Position, TranslateTransform.XProperty, end.X - f.FootX, 520, Anim.EaseInOut),
+                Anim.To(f.Position, TranslateTransform.YProperty, end.Y - f.FootY, 520, Anim.EaseInOut));
+            FxLayer.Children.Remove(f.Root);
+        }
+    }
+
     private static void Place(Art.Figure f, Point feet)
     {
         Anim.Set(f.Position, TranslateTransform.XProperty, feet.X - f.FootX);
@@ -86,6 +153,13 @@ public partial class MainWindow
         {
             Art.AddAurora(AmbientLayer, w);
         }
+        else if (id == "cedarhollow")
+        {
+            // The sheriff's light bar flashes red and blue.
+            var station = Board.Locations[0];
+            Art.AddBlink(AmbientLayer, station.X - 10, station.Y - 31, Art.C("#FF3A3A"), 0.9);
+            Art.AddBlink(AmbientLayer, station.X + 12, station.Y - 31, Art.C("#3A6AFF"), 0.9, 0.45);
+        }
         else if (id == "kestrel")
         {
             // The broadcast tower's warning light blinks on and off.
@@ -107,6 +181,8 @@ public partial class MainWindow
             "whitepine" => (0, 57, 10),
             "stagnes" => (6, 67, -2),
             "larkspur" => (5, 57, 14),
+            "crowhurst" => (3, 63, 8),
+            "merriwick" => (4, 59, 6),
             _ => null
         };
         if (chimney is { } c)
@@ -115,13 +191,17 @@ public partial class MainWindow
             Art.AddChimneySmoke(IconLayer, at.X - 42 + c.dx, at.Y - 46 + c.dy);
         }
 
-        if (!_theme.Indoor) Art.AddFog(FogLayer, w, h);
+        if (!_theme.Indoor && _theme.Weather != Weather.Carnival) Art.AddFog(FogLayer, w, h);
         _weatherLayer = new Canvas { IsHitTestVisible = false };
         if (_theme.Weather == Weather.Snow) Art.AddSnow(_weatherLayer, w, h);
         if (_theme.Weather == Weather.Rain) Art.AddRain(_weatherLayer, w, h);
         if (_theme.Weather == Weather.Motes) Art.AddMotes(_weatherLayer, w, h);
         if (_theme.Weather == Weather.Static) Art.AddStatic(_weatherLayer, w, h);
         if (_theme.Weather == Weather.Embers) Art.AddEmbers(_weatherLayer, w, h);
+        if (_theme.Weather == Weather.Leaves) Art.AddLeaves(_weatherLayer, w, h);
+        if (_theme.Weather == Weather.Carnival) Art.AddCarnival(_weatherLayer, w, h);
+        if (_theme.Weather == Weather.Blizzard) Art.AddBlizzard(_weatherLayer, w, h);
+        if (_theme.Weather == Weather.Festive) Art.AddFestive(_weatherLayer, w, h);
         FogLayer.Children.Add(_weatherLayer);
         Art.AddVignette(FogLayer, w, h);
         ApplyAmbientSetting();
@@ -226,6 +306,8 @@ public partial class MainWindow
 
         foreach (var loc in Board.Locations)
             BuildLocationInfo(loc);
+        _swarmFigures.Clear(); // InfoLayer was just cleared
+        DrawSwarm();
 
         Anim.Set(FinaleTint, OpacityProperty, _game.InFinale ? 1 : 0);
         // The standing stones wake up as the Dread rises.
@@ -723,12 +805,25 @@ public partial class MainWindow
             await GlideAsync(before.Tidewife, g.TidewifeLocation);
 
         // Card and item sounds.
-        if (g.Hand.Count > before.HandCount && g.Market.Count < before.MarketCount) Sound.Play("card_buy");
+        if (g.Hand.Count > before.HandCount && g.Tableau.Count < before.TableauCount) Sound.Play("card_buy");
         else if (g.Hand.Count < before.HandCount && g.Time > before.Time) Sound.Play("card_discard");
         else if (g.Hand.Count < before.HandCount) Sound.Play("card_play");
         bool searched = g.LastRoll is not null && !ReferenceEquals(g.LastRoll, before.Roll)
                         && (g.LastRoll.Label.StartsWith("Search") || g.LastRoll.Label.StartsWith("Rummage") || g.LastRoll.Label.StartsWith("Glance") || g.LastRoll.Label.StartsWith("Peek"));
         if (searched) Sound.Play(g.Inventory.Count > before.InventoryCount ? "found" : "nothing");
+
+        // The swarm: any you killed in your space.
+        int swatted = before.Swarm.Sum() - g.SwarmTotal;
+        if (swatted > 0)
+        {
+            Sound.Play("swarm", 0.7);
+            Sound.Play("hit", 0.6);
+            var at = SwarmFeet(g.SurvivorLocation, 0);
+            Ripple(at, Art.C("#BFD8FF"), 1.4);
+            Float(at + new Vector(0, -30), swatted == 1 ? $"−1 {g.Scenario.SwarmName}" : $"−{swatted} {g.Scenario.SwarmNames}", Art.Accent, 16);
+            DrawSwarm();
+            await Anim.Wait(350);
+        }
 
         int wounds = before.TidewifeHealth - g.TidewifeHealth;
         if (wounds > 0)

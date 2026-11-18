@@ -68,7 +68,11 @@ public partial class MainWindow
         TidewifeBar.RenderTransform = new ScaleTransform(Math.Clamp(ratio, 0, 1), 1);
         TidewifeText.Text = $"{g.TidewifeHealth} / {g.TidewifeMaxHealth}";
         TidewifeWhere.Text = $"At the {Board.Locations[g.TidewifeLocation].Name}"
-                             + (g.TidewifeHere ? ", right beside you!" : g.TidewifeNear ? ", one step away." : ".");
+                             + (g.TidewifeHere ? ", right beside you!" : g.TidewifeNear ? ", one step away." : ".")
+                             + (g.Scenario.HasSwarm
+                                 ? $"\n{g.SwarmTotal} {g.Scenario.SwarmNames} on the board (at most {g.Scenario.SwarmMax})"
+                                   + (g.SwarmHere > 0 ? $", {g.SwarmHere} with you." : ".")
+                                 : "");
         TidewifeWhere.Foreground = g.TidewifeHere ? Art.Danger : g.TidewifeNear ? Art.Warm : Art.Dim;
         VillagerText.Text = g.InFinale
             ? $"Saved {g.VillagersSaved} · lost {g.VillagersLost}. {g.Scenario.FinaleTakes}."
@@ -309,13 +313,17 @@ public partial class MainWindow
     private void RenderActions()
     {
         var g = _game;
-        WalkModeText.Text = (g.MoveTokens > 0 ? $"free walks: {g.MoveTokens}" : $"{Game.CostMove} time per move")
-            + (g.HasVehicle ? $" · {g.Scenario.VehicleName}: up to {g.Scenario.VehicleRange}" : "");
+        string vehicle = g.HasVehicle ? $" · {g.Scenario.VehicleName}: up to {g.Scenario.VehicleRange} spaces" : "";
+        WalkModeText.Text = g.MoveTokens > 0 ? $"{Plural(g.MoveTokens, "move", "moves")} ready{vehicle}" : "play Walk or Sprint";
         EscortModeText.Text = g.InFinale ? "no one left to save"
-            : g.EscortTokens > 0 ? $"free escorts: {g.EscortTokens}" : $"{g.EscortCost} time, up to {g.EscortCapacity} {g.Scenario.Victims}";
+            : g.EscortTokens > 0 ? $"{Plural(g.EscortTokens, "escort", "escorts")} ready · up to {g.EscortCapacity} {g.Scenario.Victims}"
+            : "play Lead or Shepherd";
         EscortMode.IsEnabled = !g.InFinale && !g.IsOver;
         WalkMode.IsEnabled = !g.IsOver;
         if (g.InFinale && EscortMode.IsChecked == true) WalkMode.IsChecked = true;
+        // Playing an escort card switches to Escort; playing a move card switches back.
+        if (g.EscortTokens > 0 && g.MoveTokens == 0 && EscortMode.IsEnabled) EscortMode.IsChecked = true;
+        else if (g.MoveTokens > 0 && g.EscortTokens == 0) WalkMode.IsChecked = true;
 
         var tokens = new List<string>();
         if (g.Barricaded) tokens.Add("▦ Door barred");
@@ -326,23 +334,51 @@ public partial class MainWindow
         TokensText.Text = string.Join("    ", tokens);
         TokensText.Visibility = tokens.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
 
-        string killer = g.Scenario.Killer.NameLower, she = g.Scenario.Killer.SheLower;
-        SearchButton.Content = Tile("⌕", "Search", $"{Game.CostSearch} time · {g.SearchDice()} dice", "up to 2 finds", Art.Warm);
-        SearchButton.IsEnabled = g.CanSearch && !_busy;
-        SearchButton.ToolTip = "Find up to 2 things hidden here, 1 per success.\n"
-            + (g.StashCount(g.SurvivorLocation) == 0 ? "Nothing left to find here." : $"{g.StashCount(g.SurvivorLocation)} things hidden here.");
-        FightButton.Content = Tile("⚔", "Fight", $"{Game.CostFight} time · {g.FightDice()} dice", "1 wound each", Art.Danger);
-        FightButton.IsEnabled = g.CanFight && !_busy;
-        FightButton.ToolTip = "1 wound per success.\n" + (g.TidewifeHere ? $"{g.Scenario.Killer.She}'s here. Strike!" : $"{g.Scenario.Killer.Name} must be in your location.");
-        RestButton.Content = Tile("☾", "Rest", $"{Game.CostRest} time", "heal 1", Art.Accent);
-        RestButton.IsEnabled = g.CanRest && !_busy;
-        RestButton.ToolTip = $"Heal 1. Not while {killer} is beside you{(g.TidewifeHere ? $" ({she} is!)" : "")}.";
+        RenderPhaseTracker();
 
         SteelCheck.IsEnabled = g.Hope > 0 && !g.IsOver;
         if (g.Hope == 0) g.SteelYourself = false;
         SteelCheck.IsChecked = g.SteelYourself;
 
-        EndTurnButton.IsEnabled = g.CanEndTurn;
+        bool planning = g.InPlanning;
+        EndTurnTitle.Text = planning ? "END TURN" : "END ACTIONS";
+        EndTurnSub.Text = planning ? $"press E · {g.Scenario.Killer.ShortName}'s turn next" : "press E · then Planning";
+        EndTurnButton.IsEnabled = (g.CanEndActions || g.CanEndTurn) && !_busy;
+    }
+
+    /// <summary>Action › Planning › Killer, with the current step lit.</summary>
+    private void RenderPhaseTracker()
+    {
+        var g = _game;
+        int current = g.IsOver || g.AwaitingStart ? -1 : _stage != Stage.YourTurn ? 2 : g.InPlanning ? 1 : 0;
+        string[] names = { "1 ACTION", "2 PLANNING", "3 " + g.Scenario.Killer.ShortName.ToUpperInvariant() };
+        PhaseTracker.Children.Clear();
+        for (int i = 0; i < names.Length; i++)
+        {
+            bool on = i == current;
+            PhaseTracker.Children.Add(new Border
+            {
+                Margin = new Thickness(i == 0 ? 0 : 2, 0, i == 2 ? 0 : 2, 0),
+                Padding = new Thickness(2, 4, 2, 4),
+                CornerRadius = new CornerRadius(5),
+                Background = on ? (i == 2 ? Art.Hex("#3A1C18") : Art.Hex("#2E3A2A")) : Art.Hex("#0E1C21"),
+                BorderBrush = on ? (i == 2 ? Art.Danger : Art.Warm) : Art.Edge,
+                BorderThickness = new Thickness(on ? 2 : 1),
+                Child = new TextBlock
+                {
+                    Text = names[i], FontSize = 11, FontWeight = on ? FontWeights.Bold : FontWeights.Normal,
+                    Foreground = on ? (i == 2 ? Art.Danger : Art.Warm) : Art.Dim,
+                    HorizontalAlignment = HorizontalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis
+                }
+            });
+        }
+        PhaseText.Text = current switch
+        {
+            0 => $"Play cards from your hand: they're how you move, escort, search, fight and rest. Playing is free. You have {g.Time} Time for Planning.",
+            1 => $"Buy cards from the tableau for next turn with your {g.Time} Time (unspent Time is lost). Cards you used this turn come back after it.",
+            2 => $"{g.Scenario.Killer.Name}'s turn.",
+            _ => ""
+        };
     }
 
     // ------------------------------------------------------------------ dice tray
@@ -693,20 +729,10 @@ public partial class MainWindow
     private void RenderCards()
     {
         var g = _game;
-        MarketPanel.Children.Clear();
-        for (int i = 0; i < g.Market.Count; i++)
-        {
-            int index = i;
-            var card = g.Market[i];
-            string footer = g.Hand.Count >= Game.HandLimit ? "Hand full"
-                : g.Time < card.Cost ? "Need more time"
-                : card.Cost == 0 ? "Take (free)" : $"Buy: {card.Cost} time";
-            MarketPanel.Children.Add(CardButton(card, footer, g.CanBuy(index), inHand: false, () => g.Buy(index)));
-        }
-        if (g.Market.Count == 0)
-            MarketPanel.Children.Add(new TextBlock { Text = "Bought out.\nNew cards next round.", Foreground = Art.Dim, Width = 130, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center });
+        RenderTableauSummary();
 
         HandTitle.Text = $"YOUR HAND ({g.Hand.Count}/{Game.HandLimit})";
+        HandHint.Text = g.InPlanning ? "  bought cards wait here for next turn · discard for +1 Time" : "  play cards to act (free) · discard for +1 Time";
         HandPanel.Children.Clear();
         // Up to 4 cards sit side by side. Past that the hand fans out: each card overlaps the next, its left side
         // (with Play) still showing; hovering a card lifts it to the front so all of it, Discard included, is reachable.
@@ -724,56 +750,136 @@ public partial class MainWindow
             HandPanel.Children.Add(hc);
         }
 
-        // Share the strip under the board by what each side needs, so both shrink equally (if at all).
-        double marketNeed = Math.Max(2, g.Market.Count) * slot;
+        // The tableau summary is narrow; the hand gets the rest of the strip.
         double handNeed = g.Hand.Count == 0 ? 2 * slot : slot + (g.Hand.Count - 1) * step;
-        MarketColumn.Width = new GridLength(marketNeed, GridUnitType.Star);
+        MarketColumn.Width = new GridLength(230);
         HandColumn.Width = new GridLength(Math.Max(handNeed, 2 * slot), GridUnitType.Star);
         if (g.Hand.Count == 0)
             HandPanel.Children.Add(new TextBlock
             {
-                Text = "Empty. Buy cards from the market. They wait here until you play them, or discard them for Time.",
+                Text = "Empty. Without cards you can't act: buy some in Planning (zero-cost basics are free).",
                 Foreground = Art.Dim, Width = 220, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center
             });
 
-        RenderStartPick();
+        RenderPlanning();
         RenderRollChoice();
     }
 
-    // ------------------------------------------------------------------ starting hand
+    // ------------------------------------------------------------------ the Action Tableau and Planning
 
-    private readonly HashSet<int> _startPicks = new();
+    /// <summary>True when the player has tucked the Planning overlay away to look at the board.</summary>
+    private bool _planningHidden;
 
-    private void RenderStartPick()
+    /// <summary>The narrow strip beside the hand: what's in the tableau, what's waiting to come back, and a way to open it.</summary>
+    private void RenderTableauSummary()
     {
         var g = _game;
-        if (!g.AwaitingStartPick || MenuOpen || BriefingOpen)
+        MarketPanel.Children.Clear();
+        MarketHint.Text = g.InPlanning ? "  buy now" : "  buy cards in Planning";
+        var stack = new StackPanel { Width = 206 };
+        int piles = g.Tableau.Distinct().Count();
+        stack.Children.Add(new TextBlock
         {
-            StartPickOverlay.Visibility = Visibility.Collapsed;
+            Text = $"{g.Tableau.Count} cards in {piles} piles.",
+            Foreground = Art.TextColor, FontSize = 12, TextWrapping = TextWrapping.Wrap
+        });
+        var used = g.SpentThisTurn.GroupBy(c => c.Name).Select(x => x.Count() > 1 ? $"{x.Key} ×{x.Count()}" : x.Key).ToList();
+        stack.Children.Add(new TextBlock
+        {
+            Text = used.Count == 0 ? "Nothing used yet this turn." : "Used this turn (back after Planning): " + string.Join(", ", used),
+            Foreground = Art.Dim, FontSize = 11, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 3, 0, 6),
+            MaxHeight = 64, TextTrimming = TextTrimming.CharacterEllipsis
+        });
+        var open = new Button
+        {
+            Style = (Style)FindResource("ActionButton"),
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            FontWeight = FontWeights.Bold,
+            Content = g.InPlanning ? "▴ Open the tableau to buy" : "▴ Look at the tableau",
+            BorderBrush = g.InPlanning ? Art.Warm : Art.Edge,
+            IsEnabled = !g.IsOver && !g.AwaitingStart && (!g.InPlanning || _planningHidden) && !_busy
+        };
+        open.Click += (_, _) => { _planningHidden = false; _peekTableau = !g.InPlanning; RenderPlanning(); };
+        stack.Children.Add(open);
+        MarketPanel.Children.Add(stack);
+    }
+
+    /// <summary>Looking at the tableau during the Action phase (read-only).</summary>
+    private bool _peekTableau;
+
+    /// <summary>The Planning overlay: every pile in the tableau, with cost, count left and Buy.</summary>
+    private void RenderPlanning()
+    {
+        var g = _game;
+        bool planning = g.InPlanning;
+        if (!planning) _planningHidden = false;
+        if (planning) _peekTableau = false;
+        bool show = (planning && !_planningHidden || _peekTableau && g.InAction) && !MenuOpen && !BriefingOpen && !g.IsOver;
+        if (!show)
+        {
+            if (!g.InAction) _peekTableau = false;
+            PlanningOverlay.Visibility = Visibility.Collapsed;
             return;
         }
-        StartPickOverlay.Visibility = Visibility.Visible;
-        StartPickSub.Text = $"Pick {Game.StartingPicks} free cards to set out with. Each can be played once, whenever you like.";
-        StartPickPanel.Children.Clear();
-        for (int i = 0; i < g.StartingOffer.Count; i++)
+        PlanningOverlay.Visibility = Visibility.Visible;
+        PlanningTitle.Text = planning ? "Planning: buy cards for next turn" : "The Action Tableau";
+        PlanningSub.Text = planning
+            ? $"You have {g.Time} Time  ·  hand {g.Hand.Count}/{Game.HandLimit}  ·  unspent Time is lost when your turn ends. "
+              + "Cards used this turn are greyed out until it ends."
+            : "You can buy these in Planning, after your actions. Cards you play now come back to the tableau when your turn ends.";
+        PlanningHide.Content = planning ? "▾ See the board" : "▾ Close";
+        PlanningEnd.Visibility = planning ? Visibility.Visible : Visibility.Collapsed;
+        PlanningEnd.IsEnabled = g.CanEndTurn && !_busy;
+
+        TableauPanel.Children.Clear();
+        // One pile per card: the free basics first, then by cost.
+        var kinds = ActionCards.Starters.Concat(ActionCards.All).ToList();
+        foreach (var card in kinds.OrderBy(c => c.Cost).ThenBy(c => c.Name))
         {
-            int index = i;
-            bool selected = _startPicks.Contains(index);
-            bool full = _startPicks.Count >= Game.StartingPicks;
-            StartPickPanel.Children.Add(CardButton(g.StartingOffer[i],
-                selected ? "✓ Chosen" : full ? "Unpick one first" : "Choose",
-                enabled: selected || !full, inHand: true,
-                onClick: () =>
+            int left = g.TableauCount(card);
+            int usedNow = g.SpentThisTurn.Count(c => ReferenceEquals(c, card));
+            int held = g.Hand.Count(c => ReferenceEquals(c, card));
+            string? reason = g.BuyBlockedReason(card);
+            string footer = !planning ? (card.Cost == 0 ? "Free" : $"Costs {card.Cost} Time")
+                : reason is null ? (card.Cost == 0 ? "Take (free)" : $"Buy: {card.Cost} Time")
+                : char.ToUpperInvariant(reason[0]) + reason[1..];
+            var c0 = card;
+            var button = CardButton(card, footer, planning && reason is null, inHand: false, () => g.Buy(c0));
+            button.Margin = new Thickness(0);
+            if (left == 0) button.Opacity = 0.55;
+
+            var pile = new StackPanel { Margin = new Thickness(4, 0, 4, 8) };
+            // A little stack behind the card shows how many are left.
+            var grid = new Grid { Width = CardWidth + 6, Height = CardHeight + 6 };
+            for (int k = Math.Min(left, 3) - 1; k >= 1; k--)
+                grid.Children.Add(new Border
                 {
-                    if (!_startPicks.Remove(index) && _startPicks.Count < Game.StartingPicks) _startPicks.Add(index);
-                    RenderStartPick();
-                },
-                raw: true, selected: selected));
+                    Width = CardWidth, Height = CardHeight, CornerRadius = new CornerRadius(6),
+                    Background = Art.Hex("#10242A"), BorderBrush = Art.Edge, BorderThickness = new Thickness(1),
+                    Margin = new Thickness(k * 3, k * 3, 0, 0), HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top
+                });
+            button.HorizontalAlignment = HorizontalAlignment.Left;
+            button.VerticalAlignment = VerticalAlignment.Top;
+            grid.Children.Add(button);
+            pile.Children.Add(grid);
+            var count = new List<string> { left == 0 ? "none left" : $"{left} left" };
+            if (usedNow > 0) count.Add($"{usedNow} used");
+            if (held > 0) count.Add($"{held} in hand");
+            pile.Children.Add(new TextBlock
+            {
+                Text = string.Join(" · ", count), FontSize = 11, HorizontalAlignment = HorizontalAlignment.Center,
+                Foreground = left == 0 ? Art.Dim : Art.Accent
+            });
+            TableauPanel.Children.Add(pile);
         }
-        StartPickConfirm.Content = _startPicks.Count == Game.StartingPicks
-            ? "Set out into the night"
-            : $"Choose {Game.StartingPicks - _startPicks.Count} more";
-        StartPickConfirm.IsEnabled = _startPicks.Count == Game.StartingPicks;
+    }
+
+    private void PlanningHide_Click(object sender, RoutedEventArgs e)
+    {
+        if (_game.InPlanning) _planningHidden = true;
+        _peekTableau = false;
+        RenderPlanning();
+        RenderCards();
     }
 
     // ------------------------------------------------------------------ partial dice: trade cards in
@@ -883,10 +989,10 @@ public partial class MainWindow
         Perform(() => _game.ConvertPartials(Array.Empty<int>(), Array.Empty<int>()));
     }
 
-    private async void StartPickConfirm_Click(object sender, RoutedEventArgs e)
+    /// <summary>After the briefing: reveal the opening event and start round 1's Action phase.</summary>
+    private async void BeginNight()
     {
-        if (!_game.ChooseStartingCards(_startPicks.ToList())) return;
-        _startPicks.Clear();
+        if (!_game.Begin()) return;
         Render();
         // The opening event card, revealed before the night begins.
         if (_game.LastEvent is { } opening)
@@ -897,7 +1003,7 @@ public partial class MainWindow
             Render();
         }
         Sound.Play("round", 0.7);
-        await ShowBannerAsync("ROUND 1", $"Your turn. Lead the {_game.Scenario.Victims} to the {_game.Scenario.SanctuaryName}.", Art.Warm);
+        await ShowBannerAsync("ROUND 1", $"Action phase: play cards to act. Lead the {_game.Scenario.Victims} to the {_game.Scenario.SanctuaryName}.", Art.Warm);
     }
 
     // ------------------------------------------------------------------ items

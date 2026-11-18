@@ -30,10 +30,55 @@ public partial class MainWindow
         await ShowBannerAsync(tide.IsFinaleTide ? $"THE {sc.FinaleName.ToUpperInvariant()}" : sc.PhaseBanner,
             tide.IsFinaleTide ? $"{sc.Killer.She} hunts only you." : $"{sc.Killer.Name}'s turn", Art.Danger);
 
+        // The swarm is drawn as it was until its own events play out.
+        _swarmShown = g.Scenario.HasSwarm ? before.Swarm.ToArray() : null;
+        DrawSwarm();
         foreach (var ev in tide.Events)
         {
             switch (ev.Kind)
             {
+                case TideEventKind.SwarmMoved:
+                    _swarmShown![ev.From] -= ev.Amount;
+                    DrawSwarm();
+                    await SwarmMoveAsync(ev.From, ev.To, ev.Amount);
+                    _swarmShown[ev.To] += ev.Amount;
+                    DrawSwarm();
+                    break;
+
+                case TideEventKind.SwarmSpawned:
+                {
+                    Sound.Play("swarm", 0.8);
+                    _swarmShown![ev.To] += ev.Amount;
+                    DrawSwarm();
+                    var at = SwarmFeet(ev.To, 0);
+                    Ripple(at, Art.C("#BFD8FF"), 1.6);
+                    Float(at + new Vector(0, -34), ev.Amount == 1 ? $"+1 {g.Scenario.SwarmName}" : $"+{ev.Amount} {g.Scenario.SwarmNames}", Art.Hex("#BFD8FF"), 13);
+                    await Anim.Wait(500);
+                    break;
+                }
+
+                case TideEventKind.SwarmBit:
+                {
+                    SetStage(Stage.SheStrikes);
+                    var you = FeetOf(_wren);
+                    if (ev.Amount > 0)
+                    {
+                        Sound.Play("swarm");
+                        Sound.Play("strike", 0.6);
+                        Ripple(you, Art.C("#C8553D"), 1.4);
+                        Float(you + new Vector(0, -64), $"−{ev.Amount} ({g.Scenario.SwarmNames})", Art.Danger, 18);
+                        await FlashAsync(_wren);
+                    }
+                    else
+                    {
+                        Sound.Play("miss", 0.6);
+                        Float(you + new Vector(0, -64), ev.Text.Contains("lone") ? "It hisses, alone" : "They hold back", Art.Accent, 14);
+                        await Anim.Wait(500);
+                    }
+                    RenderStatus();
+                    break;
+                }
+
                 case TideEventKind.CardDrawn:
                     await RevealTideCardAsync(tide);
                     SetStage(Stage.SheMoves);
@@ -155,6 +200,9 @@ public partial class MainWindow
                     break;
             }
         }
+
+        _swarmShown = null;
+        DrawSwarm();
 
         // The Horror track: did the Dread knock you into a band with fewer dice?
         if (!g.IsOver && g.HorrorDice < before.HorrorDice)
@@ -423,28 +471,40 @@ public partial class MainWindow
 
     private (string, Brush) YourTurnHint(Game g)
     {
-        if (g.AwaitingStartPick) return ($"Choose {Game.StartingPicks} free starting cards to begin.", Art.Warm);
         var sc = g.Scenario;
         string she = sc.Killer.She;
+        if (g.AwaitingStart) return ("Read the objective, then begin the night.", Art.Warm);
         if (g.Phase == Phase.Won) return ($"You did it. {sc.Place} is quiet again.", Art.Accent);
         if (g.Phase == Phase.Lost) return ($"{sc.Killer.Name} has taken you.", Art.Danger);
 
-        bool free = g.MoveTokens > 0 || g.EscortTokens > 0;
+        if (g.InPlanning)
+            return (g.Hand.Count >= Game.HandLimit
+                ? $"Planning: your hand is full ({Game.HandLimit}). Discard for Time, or END TURN (E)."
+                : $"Planning: buy cards for next turn with your {g.Time} Time. Unspent Time is lost. Then END TURN (E).", Art.Warm);
+
+        bool fightCard = g.Hand.Any(c => c.Effect is CardEffect.Shove or CardEffect.WildSwing or CardEffect.DesperatePlan);
         if (g.TidewifeHere)
-            return (g.CanFight || g.Hand.Any(c => c.Effect is CardEffect.WildSwing or CardEffect.DesperatePlan)
-                ? $"{she} is right beside you! Fight, use an item, or run before the {sc.RoundWord}."
-                : $"{she} is right beside you and you're out of Time to fight. Use a card or item, or brace yourself.", Art.Danger);
+            return (fightCard
+                ? $"{she} is right beside you! Play an attack card, use an item, or get away before the {sc.RoundWord}."
+                : $"{she} is right beside you and you hold no attack card. Use an item, move away, or brace yourself.", Art.Danger);
         if (g.InFinale)
             return ($"The {sc.FinaleName}: {sc.Killer.SheLower} hunts only you. Arm yourself and finish it.", Art.Danger);
-        if (g.Villagers[g.SurvivorLocation] > 0 && (g.Time >= g.EscortCost || g.EscortTokens > 0))
+        if (g.Villagers[g.SurvivorLocation] > 0 && g.EscortTokens >= g.EscortCost)
             return ($"{Plural(g.Villagers[g.SurvivorLocation], sc.Victim + " is", sc.Victims + " are")} here. Choose Escort, then click toward the {sc.SanctuaryName} (glowing paths).", Art.Warm);
-        if (g.Time == 0 && !free && g.Hand.Any())
-            return ($"Out of Time. Discard cards from your hand for +{Game.DiscardRefund} Time each, or END TURN (E).", Art.Warm);
-        if (g.Time == 0 && !free && !g.Hand.Any())
-            return ($"Out of Time. Press END TURN (or E) and brace for the {sc.RoundWord}.", Art.Warm);
+        if (g.Villagers[g.SurvivorLocation] > 0 && g.Hand.Any(c => c.Effect is CardEffect.Guide or CardEffect.Shepherd))
+            return ($"{Plural(g.Villagers[g.SurvivorLocation], sc.Victim + " is", sc.Victims + " are")} here. Play Lead or Shepherd to escort them.", Art.Warm);
+        if (g.MoveTokens > 0)
+            return ($"{Plural(g.MoveTokens, "move", "moves")} ready. Click a glowing place to go there.", Art.TextColor);
+        if (g.SwarmHere > 0)
+            return (g.SwarmHere == 1
+                ? $"A {sc.SwarmName} is here. Alone it only hisses, but more will come. An attack card kills one per success."
+                : $"{g.SwarmHere} {sc.SwarmNames} are on you and will nip for {Game.SwarmDamage(g.SwarmHere)}. Play an attack card (one dies per success), or get away.",
+                g.SwarmHere == 1 ? Art.Warm : Art.Danger);
         if (g.TidewifeNear)
             return ($"{she} is one step away. Bar the door, get clear, or get ready to fight.", Art.Warm);
-        return ($"Your turn: {g.Time} Time left. Walk, search, buy cards, then END TURN (E).", Art.TextColor);
+        if (!Enumerable.Range(0, g.Hand.Count).Any(g.CanPlay) && g.MoveTokens == 0 && g.EscortTokens == 0)
+            return ("Nothing left to play. END ACTIONS (E) to buy cards in Planning.", Art.Warm);
+        return ("Action phase: play cards from your hand (Walk to move, Search, Attack...), then END ACTIONS (E).", Art.TextColor);
     }
 
     private static string Plural(int n, string one, string many) => n == 1 ? $"1 {one}" : $"{n} {many}";

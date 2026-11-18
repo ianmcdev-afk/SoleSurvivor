@@ -11,7 +11,7 @@ using Line = System.Windows.Shapes.Line;
 namespace SoleSurvivor.App;
 
 /// <summary>Moving ambience over the board. Motes: dream-dust drifting up. Static: TV interference. Embers: candlelit dust.</summary>
-public enum Weather { Fog, Snow, Rain, Motes, Static, Embers }
+public enum Weather { Fog, Snow, Rain, Motes, Static, Embers, Leaves, Carnival, Blizzard, Festive }
 
 /// <summary>Colours and ambience for one scenario's board.</summary>
 /// <param name="Trail">Killer footprints and ripples.</param>
@@ -29,6 +29,18 @@ internal static partial class Art
         "whitepine" => new("#7C8A99", "#5E6B7A", "#9AA8B6", "#6A7480",
                            "#55606C", "#A7B4C0", "#8796A4",
                            C("#CFE8FF"), C("#BFE6FF"), C("#9FD0F0"), false, Weather.Snow, "#3E4A57"),
+        "cedarhollow" => new("#2A2A22", "#1C1C16", "#4A3A22", "#3A3226",
+                             "#222226", "#3C3C44", "#E8E4D8",
+                             C("#E8743A"), C("#FFB070"), C("#E8743A"), false, Weather.Leaves, "#16140E"),
+        "holloway" => new("#2A1E2E", "#1A1220", "#3A2A3E", "#34283A",
+                          "#3A2A1E", "#5A4630", "#E8C24A",
+                          C("#FF6FB0"), C("#FFC0E0"), C("#E8C24A"), false, Weather.Carnival, "#140E18"),
+        "crowhurst" => new("#C8D2DC", "#9AA6B4", "#B8C4D0", "#8A96A4",
+                           "#7A6A5A", "#B8AC9A", "#E8E4D8",
+                           C("#8A3A2E"), C("#FFC870"), C("#FFC870"), false, Weather.Blizzard, "#4A5460"),
+        "merriwick" => new("#AEB8C8", "#8A96A8", "#BCC6D4", "#7E8A9C",
+                           "#5A5A64", "#8A8A94", "#F0E8D0",
+                           C("#2A2228"), C("#BFD8FF"), C("#FFD070"), false, Weather.Festive, "#3A4456"),
         "larkspur" => new("#2A2440", "#1C1830", "#3A3358", "#322C48",
                           "#24202E", "#3E3A4A", "#C9B86A",
                           C("#C8A8FF"), C("#E8D8FF"), C("#C8A8FF"), false, Weather.Motes, "#16122A"),
@@ -62,7 +74,7 @@ internal static partial class Art
                 0 => Gatehouse(), 1 => Courtyard(), 2 => GothicChapel(), 3 => Ward(false),
                 4 => Ward(true), 5 => RecordsOffice(), 6 => BoilerHouse(), 7 => Morgue(), _ => new Canvas()
             },
-            "larkspur" or "kestrel" or "ashgrove" => ExtraIcon(scenarioId, id),
+            "larkspur" or "kestrel" or "ashgrove" or "cedarhollow" or "holloway" or "crowhurst" or "merriwick" => ExtraIcon(scenarioId, id),
             _ => GallowmouthIcon(id)
         };
         icon.Width = IconWidth;
@@ -78,6 +90,10 @@ internal static partial class Art
         "larkspur" => Maya(),
         "kestrel" => Ruth(),
         "ashgrove" => Clara(),
+        "cedarhollow" => Jess(),
+        "holloway" => Tasha(),
+        "crowhurst" => Daniel(),
+        "merriwick" => Billie(),
         _ => Wren()
     };
 
@@ -88,8 +104,15 @@ internal static partial class Art
         "larkspur" => LullabyMan(),
         "kestrel" => Presenter(),
         "ashgrove" => Curator(),
+        "cedarhollow" => Caller(),
+        "holloway" => Merrymaker(),
+        "crowhurst" => Devotee(),
+        "merriwick" => Hatchmother(),
         _ => TidewifeFigure()
     };
+
+    /// <summary>One of the swarm, for scenarios that have one.</summary>
+    public static Figure SwarmFigure(string scenarioId) => Sootling();
 
     // ================================================================== Whitepine icons
 
@@ -621,13 +644,126 @@ internal static partial class Art
     }
 
     /// <summary>A light that blinks on and off (the broadcast tower's warning light).</summary>
-    public static void AddBlink(Canvas layer, double x, double y, Color colour, double seconds)
+    public static void AddBlink(Canvas layer, double x, double y, Color colour, double seconds, double offset = 0)
     {
         var g = Glow(x, y, 9, colour, 0.95);
-        var frames = new DoubleAnimationUsingKeyFrames { Duration = new Duration(TimeSpan.FromSeconds(seconds)), RepeatBehavior = RepeatBehavior.Forever };
+        var frames = new DoubleAnimationUsingKeyFrames { Duration = new Duration(TimeSpan.FromSeconds(seconds)), RepeatBehavior = RepeatBehavior.Forever, BeginTime = TimeSpan.FromSeconds(offset) };
         frames.KeyFrames.Add(new DiscreteDoubleKeyFrame(1, KeyTime.FromPercent(0)));
         frames.KeyFrames.Add(new DiscreteDoubleKeyFrame(0, KeyTime.FromPercent(0.5)));
         g.BeginAnimation(UIElement.OpacityProperty, frames);
         layer.Children.Add(g);
+    }
+
+    // ================================================================== Cedar Hollow, Holloway, Crowhurst weather
+
+    /// <summary>Cedar Hollow: autumn leaves tumbling across the board on the wind.</summary>
+    public static void AddLeaves(Canvas layer, double width, double height)
+    {
+        var rng = new Random(71);
+        string[] colours = ["#C8553D", "#E8743A", "#E8C24A", "#8A5A2A", "#A83A2A"];
+        for (int i = 0; i < 46; i++)
+        {
+            double size = 3 + rng.NextDouble() * 3;
+            var leaf = P($"M0,{size / 2} Q{size / 2},-{size / 4} {size},{size / 2} Q{size / 2},{size * 1.25} 0,{size / 2} Z", colours[rng.Next(colours.Length)]);
+            leaf.IsHitTestVisible = false;
+            leaf.Opacity = 0.85;
+            var spin = new RotateTransform(0, size / 2, size / 2);
+            var move = new TranslateTransform();
+            var g = new TransformGroup();
+            g.Children.Add(spin);
+            g.Children.Add(move);
+            leaf.RenderTransform = g;
+            Canvas.SetLeft(leaf, -20 - rng.NextDouble() * 60);
+            Canvas.SetTop(leaf, rng.NextDouble() * height);
+            double seconds = 9 + rng.NextDouble() * 9;
+            var begin = TimeSpan.FromSeconds(-rng.NextDouble() * seconds);
+            move.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(0, width + 120, new Duration(TimeSpan.FromSeconds(seconds))) { RepeatBehavior = RepeatBehavior.Forever, BeginTime = begin });
+            move.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(-30, 50, new Duration(TimeSpan.FromSeconds(2 + rng.NextDouble() * 2)))
+            { RepeatBehavior = RepeatBehavior.Forever, AutoReverse = true, EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut } });
+            spin.BeginAnimation(RotateTransform.AngleProperty, new DoubleAnimation(0, rng.Next(2) == 0 ? 360 : -360, new Duration(TimeSpan.FromSeconds(2 + rng.NextDouble() * 3))) { RepeatBehavior = RepeatBehavior.Forever });
+            layer.Children.Add(leaf);
+        }
+    }
+
+    /// <summary>Holloway Funfair: strings of coloured bulbs chasing along the top and bottom of the board, and drifting smoke.</summary>
+    public static void AddCarnival(Canvas layer, double width, double height)
+    {
+        Color[] bulbs = [C("#FF6FB0"), C("#E8C24A"), C("#6AF0A0"), C("#5AB8FF"), C("#FF5A5A")];
+        foreach (double y0 in new[] { 8.0, height - 6 })
+        {
+            var wire = P($"M0,{y0} " + string.Concat(Enumerable.Range(0, 10).Select(i => $"Q{width / 10 * i + width / 20},{y0 + 10} {width / 10 * (i + 1)},{y0} ")), "none", "#1A1A1A", 0.8);
+            wire.IsHitTestVisible = false;
+            layer.Children.Add(wire);
+            int n = 60;
+            for (int i = 0; i < n; i++)
+            {
+                double x = width * i / n + 6;
+                double seg = (x % (width / 10)) / (width / 10);
+                double y = y0 + 10 * 4 * seg * (1 - seg) * 0.5;
+                var b = Glow(x, y, 4.5, bulbs[i % bulbs.Length], 1);
+                b.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0.15, 1, new Duration(TimeSpan.FromSeconds(0.5)))
+                { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, BeginTime = TimeSpan.FromSeconds(i % 5 * 0.2) });
+                layer.Children.Add(b);
+            }
+        }
+        AddFog(layer, width, height);
+    }
+
+    /// <summary>Crowhurst Farm: a blizzard of snow driven sideways, and a white gust sweeping across now and then.</summary>
+    public static void AddBlizzard(Canvas layer, double width, double height)
+    {
+        var rng = new Random(83);
+        var flake = new SolidColorBrush(Color.FromArgb(230, 250, 252, 255));
+        flake.Freeze();
+        for (int i = 0; i < 140; i++)
+        {
+            double size = 1.4 + rng.NextDouble() * 2.6;
+            var e = new Ellipse { Width = size * 1.6, Height = size, Fill = flake, IsHitTestVisible = false, Opacity = 0.5 + rng.NextDouble() * 0.5 };
+            var move = new TranslateTransform();
+            e.RenderTransform = move;
+            Canvas.SetLeft(e, -20);
+            Canvas.SetTop(e, rng.NextDouble() * height - 60);
+            double seconds = 2.2 + rng.NextDouble() * 2.5;
+            var begin = TimeSpan.FromSeconds(-rng.NextDouble() * seconds);
+            move.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(0, width + 40, new Duration(TimeSpan.FromSeconds(seconds))) { RepeatBehavior = RepeatBehavior.Forever, BeginTime = begin });
+            move.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(0, 90, new Duration(TimeSpan.FromSeconds(seconds))) { RepeatBehavior = RepeatBehavior.Forever, BeginTime = begin });
+            layer.Children.Add(e);
+        }
+        var gust = new Rectangle { Width = width, Height = height, Fill = Hex("#F4F8FC"), IsHitTestVisible = false, Opacity = 0 };
+        var f = new DoubleAnimationUsingKeyFrames { Duration = new Duration(TimeSpan.FromSeconds(9)), RepeatBehavior = RepeatBehavior.Forever };
+        f.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromSeconds(0))));
+        f.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromSeconds(5.5))));
+        f.KeyFrames.Add(new LinearDoubleKeyFrame(0.28, KeyTime.FromTimeSpan(TimeSpan.FromSeconds(6.6))));
+        f.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromSeconds(8.2))));
+        gust.BeginAnimation(UIElement.OpacityProperty, f);
+        layer.Children.Add(gust);
+    }
+
+    // ================================================================== Merriwick weather
+
+    /// <summary>Merriwick: soft snow falling, and strings of fairy lights twinkling along the top and bottom of the board.</summary>
+    public static void AddFestive(Canvas layer, double width, double height)
+    {
+        AddSnow(layer, width, height);
+        var rng = new Random(97);
+        Color[] bulbs = [C("#FF5A5A"), C("#FFD84A"), C("#6AF0A0"), C("#5AB8FF"), C("#FFB0E0")];
+        foreach (double y0 in new[] { 6.0, height - 5 })
+        {
+            var wire = P($"M0,{y0} " + string.Concat(Enumerable.Range(0, 8).Select(i => $"Q{width / 8 * i + width / 16},{y0 + 12} {width / 8 * (i + 1)},{y0} ")), "none", "#2A2A30", 0.8);
+            wire.IsHitTestVisible = false;
+            layer.Children.Add(wire);
+            int n = 48;
+            for (int i = 0; i < n; i++)
+            {
+                double x = width * i / n + 8;
+                double seg = (x % (width / 8)) / (width / 8);
+                double y = y0 + 12 * 4 * seg * (1 - seg) * 0.5;
+                var b = Glow(x, y, 4, bulbs[rng.Next(bulbs.Length)], 1);
+                // A slow, random twinkle rather than a chase.
+                b.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0.35, 1, new Duration(TimeSpan.FromSeconds(0.8 + rng.NextDouble() * 1.6)))
+                { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, BeginTime = TimeSpan.FromSeconds(-rng.NextDouble() * 3) });
+                layer.Children.Add(b);
+            }
+        }
     }
 }

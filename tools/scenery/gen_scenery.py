@@ -619,6 +619,224 @@ def ashgrove():
         ("chest_band", "none", "#C9A04A", 1, 1, "top"),
     ]
 
+
+# ====================================================================== Cedar Hollow
+def cedarhollow():
+    use_map('CedarHollow')
+    for _ in range(4000):
+        if len(layers.get("lawn", [])) >= 14: break
+        x, y = rng.uniform(40, 760), rng.uniform(40, 540)
+        w, h = rng.uniform(40, 70), rng.uniform(22, 34)
+        if clear(x, y, 22) and clear(x - w/2, y, 8) and clear(x + w/2, y, 8):
+            add("lawn", f"M{f(x-w/2)},{f(y-h/2)} h{f(w)} v{f(h)} h{f(-w)} Z")
+    def tree(x, y):
+        s = rng.uniform(0.8, 1.3)
+        add("tree_shadow", ellipse(x + 2, y + 2, 13 * s, 4 * s))
+        add("trunk", f"M{f(x-1.5)},{f(y)} v{f(-9*s)} h3 v{f(9*s)} Z")
+        add(rng.choice(["canopy_orange", "canopy_red", "canopy_gold"]), ellipse(x, y - 14 * s, 11 * s, 10 * s))
+    scatter(26, 15, (24, 24, 776, 556), tree)
+    def leafpile(x, y):
+        add(rng.choice(["pile_orange", "pile_red"]), f"M{f(x-9)},{f(y)} q4,-7 9,-6 q5,-1 9,6 Z")
+    scatter(10, 9, (24, 24, 776, 556), leafpile)
+    def pumpkin(x, y):
+        add("pumpkin_glow", ellipse(x, y - 3, 9, 6))
+        add("pumpkin", ellipse(x, y - 3, 4, 3.2))
+        add("pumpkin_face", f"M{f(x-2)},{f(y-4)} l0.8,-0.8 l0.8,0.8 M{f(x+0.4)},{f(y-4)} l0.8,-0.8 l0.8,0.8 M{f(x-2)},{f(y-2)} q2,1.4 4,0")
+    scatter(10, 7, (30, 30, 770, 550), pumpkin)
+    def fence(x, y):
+        w = rng.uniform(26, 44)
+        posts = " ".join(f"M{f(x-w/2+i*4)},{f(y)} v-6" for i in range(int(w // 4) + 1))
+        add("fence", f"M{f(x-w/2)},{f(y-3)} h{f(w)} " + posts)
+    scatter(10, 20, (30, 30, 770, 550), fence)
+    def lamp(x, y):
+        add("lamppost", f"M{f(x)},{f(y)} L{f(x)},{f(y-22)} q0,-3 5,-3")
+        add("lamp_glass", ellipse(x + 5, y - 24, 2.2, 1.6))
+        add("lamp_pool", ellipse(x + 4, y + 1, 14, 4))
+    scatter(7, 10, (30, 30, 770, 550), lamp)
+    def car(x, y):
+        c = rng.choice(["car_red", "car_blue", "car_cream"])
+        add(c, f"M{f(x-12)},{f(y)} v-5 l4,-4 h14 l4,4 h2 v5 Z")
+        add("car_glass", f"M{f(x-7)},{f(y-6)} l2.5,-2.5 h4.5 v2.5 Z M{f(x+1)},{f(y-6)} v-2.5 h4 l2.5,2.5 Z")
+        add("wheels", ellipse(x - 7, y, 2.4, 2.4) + " " + ellipse(x + 7, y, 2.4, 2.4))
+    scatter(4, 16, (40, 40, 760, 540), car)
+    return layers, [
+        ("lawn", "#2E3220", None, 1, 0.8, "ground"),
+        ("lamp_pool", "#E8C26A", None, 1, 0.12, "ground"),
+        ("pumpkin_glow", "#FF9A3A", None, 1, 0.25, "ground"),
+        ("pile_orange", "#B85A2A", None, 1, 0.9, "top"),
+        ("pile_red", "#8A3A2A", None, 1, 0.9, "top"),
+        ("tree_shadow", "#000000", None, 1, 0.3, "top"),
+        ("trunk", "#3A2A20", None, 1, 1, "top"),
+        ("canopy_orange", "#B8602A", "#6A3014", 0.8, 1, "top"),
+        ("canopy_red", "#8A3A2A", "#4A1A12", 0.8, 1, "top"),
+        ("canopy_gold", "#B8902A", "#6A5014", 0.8, 1, "top"),
+        ("fence", "none", "#D8D4C4", 1.2, 0.85, "top"),
+        ("pumpkin", "#E8743A", "#8A3A1E", 0.5, 1, "top"),
+        ("pumpkin_face", "none", "#2A1408", 0.6, 1, "top"),
+        ("lamppost", "none", "#2A2A30", 1.6, 1, "top"),
+        ("lamp_glass", "#FFE08A", None, 1, 0.95, "top"),
+        ("car_red", "#8A3A3A", "#3A1A1A", 0.6, 1, "top"),
+        ("car_blue", "#3A5A8A", "#1A2A3A", 0.6, 1, "top"),
+        ("car_cream", "#C8BCA0", "#5A5440", 0.6, 1, "top"),
+        ("car_glass", "#9AB0C8", None, 1, 0.9, "top"),
+        ("wheels", "#141414", None, 1, 1, "top"),
+    ]
+
+# ====================================================================== Holloway Funfair
+def holloway():
+    use_map('Holloway')
+    for _ in range(3000):
+        if len(layers.get("sawdust", [])) >= 22: break
+        x, y = rng.uniform(40, 760), rng.uniform(40, 540)
+        if clear(x, y, 14): blob(x, y, rng.uniform(18, 36), rng.uniform(6, 11), "sawdust")
+    def tent(x, y):
+        s = rng.uniform(0.8, 1.2)
+        add(rng.choice(["tent_red", "tent_blue", "tent_yellow"]), f"M{f(x-11*s)},{f(y)} L{f(x)},{f(y-16*s)} L{f(x+11*s)},{f(y)} Z")
+        add("tent_stripe", f"M{f(x)},{f(y-16*s)} L{f(x-4*s)},{f(y)} M{f(x)},{f(y-16*s)} L{f(x+4*s)},{f(y)}")
+        add("pennant", f"M{f(x)},{f(y-16*s)} v-5 l4,1.5 l-4,1.5")
+    scatter(14, 14, (24, 24, 776, 556), tent)
+    def hay(x, y):
+        add("hay", f"M{f(x-7)},{f(y)} v-6 q7,-3 14,0 v6 Z")
+        add("hay_band", f"M{f(x-7)},{f(y-3)} h14")
+    scatter(10, 8, (24, 24, 776, 556), hay)
+    def bin_(x, y):
+        add("bin", f"M{f(x-3)},{f(y)} l-0.6,-8 h7.2 l-0.6,8 Z")
+        add("litter", f"M{f(x+6)},{f(y)} l3,-1 l1,1 Z M{f(x-8)},{f(y-1)} l2,-1 l2,1 Z")
+    scatter(8, 6, (30, 30, 770, 550), bin_)
+    def balloon_cart(x, y):
+        add("cart", f"M{f(x-6)},{f(y-2)} h12 v-6 h-12 Z")
+        add("wheels", ellipse(x - 4, y, 1.8, 1.8) + " " + ellipse(x + 4, y, 1.8, 1.8))
+        add("popcorn", f"M{f(x-5)},{f(y-8)} q5,-6 10,0 Z")
+    scatter(5, 9, (30, 30, 770, 550), balloon_cart)
+    def bulb_pole(x, y):
+        add("bulb_pole", f"M{f(x)},{f(y)} v-24")
+        add("bulb_glow", ellipse(x, y - 25, 6, 6))
+        add("bulb", ellipse(x, y - 25, 1.8, 1.8))
+    scatter(10, 8, (30, 30, 770, 550), bulb_pole)
+    return layers, [
+        ("sawdust", "#4A3A2A", None, 1, 0.6, "ground"),
+        ("bulb_glow", "#FFE08A", None, 1, 0.3, "ground"),
+        ("tent_red", "#C8553D", "#6A2018", 0.6, 1, "top"),
+        ("tent_blue", "#3A6AB0", "#1A3050", 0.6, 1, "top"),
+        ("tent_yellow", "#E8C24A", "#7A6010", 0.6, 1, "top"),
+        ("tent_stripe", "none", "#F0E8D8", 1, 0.9, "top"),
+        ("pennant", "#F0E8D8", "#5A5A5A", 0.5, 1, "top"),
+        ("hay", "#C8A858", "#7A6020", 0.6, 1, "top"),
+        ("hay_band", "none", "#7A6020", 0.8, 1, "top"),
+        ("bin", "#4A5A4A", "#1A2A1A", 0.6, 1, "top"),
+        ("litter", "#E8E4D8", None, 1, 0.8, "top"),
+        ("cart", "#C8553D", "#5A1E18", 0.6, 1, "top"),
+        ("popcorn", "#F8F0D0", "#B8A878", 0.4, 1, "top"),
+        ("wheels", "#141414", None, 1, 1, "top"),
+        ("bulb_pole", "none", "#2A2A2A", 1.4, 1, "top"),
+        ("bulb", "#FFF4C0", None, 1, 1, "top"),
+    ]
+
+# ====================================================================== Crowhurst Farm
+def crowhurst():
+    use_map('Crowhurst')
+    for _ in range(3000):
+        if len(layers.get("drift", [])) >= 20: break
+        x, y = rng.uniform(40, 760), rng.uniform(40, 540)
+        if clear(x, y, 16): blob(x, y, rng.uniform(22, 44), rng.uniform(7, 13), "drift")
+    def rail(x, y):
+        w = rng.uniform(30, 50)
+        add("rail", f"M{f(x-w/2)},{f(y-6)} h{f(w)} M{f(x-w/2)},{f(y-2)} h{f(w)} " + " ".join(f"M{f(x-w/2+i*w/3)},{f(y)} v-9" for i in range(4)))
+        add("rail_snow", f"M{f(x-w/2)},{f(y-7)} h{f(w)}")
+    scatter(12, 22, (30, 30, 770, 550), rail)
+    def hay(x, y):
+        add("hay", ellipse(x, y - 5, 7, 5))
+        add("hay_snow", f"M{f(x-6)},{f(y-8)} q6,-4 12,0 q-6,-1 -12,0 Z")
+    scatter(10, 8, (24, 24, 776, 556), hay)
+    def dead(x, y):
+        s = rng.uniform(0.8, 1.2)
+        add("dead_tree", f"M{f(x)},{f(y)} L{f(x)},{f(y-22*s)} M{f(x)},{f(y-12*s)} L{f(x-9*s)},{f(y-20*s)} M{f(x)},{f(y-17*s)} L{f(x+10*s)},{f(y-24*s)} M{f(x)},{f(y-22*s)} L{f(x+3*s)},{f(y-32*s)}")
+        add("branch_snow", f"M{f(x-9*s)},{f(y-20.5*s)} l3,-1 M{f(x+10*s)},{f(y-24.5*s)} l-3,1")
+    scatter(18, 13, (24, 24, 776, 556), dead)
+    def pine(x, y):
+        s = rng.uniform(0.8, 1.2)
+        add("pine", f"M{f(x)},{f(y-26*s)} L{f(x+9*s)},{f(y-6*s)} L{f(x-9*s)},{f(y-6*s)} Z")
+        add("pine_snow", f"M{f(x)},{f(y-26*s)} L{f(x+4*s)},{f(y-17*s)} L{f(x-4*s)},{f(y-17*s)} Z")
+        add("trunk", f"M{f(x-1.2)},{f(y)} v-6 h2.4 v6 Z")
+    scatter(14, 11, (24, 24, 776, 556), pine)
+    def logs(x, y):
+        add("logs", f"M{f(x-8)},{f(y)} h16 v-4 h-16 Z M{f(x-6)},{f(y-4)} h12 v-4 h-12 Z")
+        add("log_ends", ellipse(x - 8, y - 2, 1.4, 2) + " " + ellipse(x - 6, y - 6, 1.4, 2))
+    scatter(6, 9, (30, 30, 770, 550), logs)
+    return layers, [
+        ("drift", "#E8EEF4", None, 1, 0.8, "ground"),
+        ("rail", "none", "#5A4030", 1.4, 1, "top"),
+        ("rail_snow", "none", "#F4F8FC", 1.2, 1, "top"),
+        ("hay", "#B8984A", "#6A5020", 0.6, 1, "top"),
+        ("hay_snow", "#F4F8FC", None, 1, 1, "top"),
+        ("dead_tree", "none", "#3A2E28", 1.8, 1, "top"),
+        ("branch_snow", "none", "#F4F8FC", 1.2, 1, "top"),
+        ("pine", "#2E4A3A", "#1A2E22", 0.6, 1, "top"),
+        ("pine_snow", "#F4F8FC", None, 1, 1, "top"),
+        ("trunk", "#3A2A20", None, 1, 1, "top"),
+        ("logs", "#7A5A3A", "#3A2A1A", 0.6, 1, "top"),
+        ("log_ends", "#C8A878", None, 1, 1, "top"),
+    ]
+
+# ====================================================================== Merriwick
+def merriwick():
+    use_map('Merriwick')
+    for _ in range(3000):
+        if len(layers.get("drift", [])) >= 18: break
+        x, y = rng.uniform(40, 760), rng.uniform(40, 540)
+        if clear(x, y, 16): blob(x, y, rng.uniform(20, 40), rng.uniform(6, 12), "drift")
+    def lamp(x, y):
+        add("lamp_post", f"M{f(x)},{f(y)} v-24 M{f(x-4)},{f(y)} h8")
+        add("lamp_head", f"M{f(x-3.5)},{f(y-24)} h7 l-1,-5 h-5 Z")
+        add("lamp_glow", ellipse(x, y - 26, 9, 9))
+        add("lamp_snow", f"M{f(x-4)},{f(y-29.4)} h8 v-1.2 h-8 Z")
+    scatter(12, 16, (30, 30, 770, 550), lamp)
+    def fir(x, y):
+        s = rng.uniform(0.8, 1.15)
+        add("pine", f"M{f(x)},{f(y-26*s)} L{f(x+9*s)},{f(y-6*s)} L{f(x-9*s)},{f(y-6*s)} Z")
+        add("pine_snow", f"M{f(x)},{f(y-26*s)} L{f(x+4*s)},{f(y-17*s)} L{f(x-4*s)},{f(y-17*s)} Z")
+        add("trunk", f"M{f(x-1.2)},{f(y)} v-6 h2.4 v6 Z")
+        for k in range(4):
+            cx, cy = x + rng.uniform(-6, 6) * s, y - rng.uniform(8, 18) * s
+            add(rng.choice(["bulb_r", "bulb_y", "bulb_b"]), ellipse(cx, cy, 1.1, 1.1))
+    scatter(14, 12, (24, 24, 776, 556), fir)
+    def snowman(x, y):
+        add("snowman", ellipse(x, y - 5, 6, 5.5) + " " + ellipse(x, y - 14, 4.2, 4))
+        add("snowman_hat", f"M{f(x-3.5)},{f(y-17.5)} h7 v-1 h-1.5 v-4 h-4 v4 h-1.5 Z")
+        add("snowman_scarf", f"M{f(x-4)},{f(y-10.5)} h8 v1.6 h-8 Z M{f(x+2)},{f(y-9)} v4 h1.6 v-4 Z")
+        add("coal", ellipse(x - 1.4, y - 15, 0.6, 0.6) + " " + ellipse(x + 1.4, y - 15, 0.6, 0.6) + " " + ellipse(x, y - 6, 0.6, 0.6) + " " + ellipse(x, y - 3, 0.6, 0.6))
+    scatter(6, 14, (30, 30, 770, 550), snowman)
+    def postbox(x, y):
+        add("postbox", f"M{f(x-3)},{f(y)} v-11 q3,-3 6,0 v11 Z")
+        add("lamp_snow", f"M{f(x-3.2)},{f(y-12.6)} q3.2,-3 6.4,0 Z")
+        add("coal", f"M{f(x-2)},{f(y-8)} h4 v0.8 h-4 Z")
+    scatter(4, 10, (30, 30, 770, 550), postbox)
+    def car(x, y):
+        add("car", f"M{f(x-12)},{f(y)} v-6 l4,-4 h14 l4,4 h2 v6 Z")
+        add("car_snow", f"M{f(x-8)},{f(y-10)} h14 l1,-2 h-15 Z M{f(x-12)},{f(y-6)} h4 v-1 h-4 Z")
+        add("coal", ellipse(x - 7, y, 2, 2) + " " + ellipse(x + 7, y, 2, 2))
+    scatter(5, 18, (30, 30, 770, 550), car)
+    return layers, [
+        ("drift", "#E8EEF4", None, 1, 0.8, "ground"),
+        ("lamp_glow", "#FFE08A", None, 1, 0.35, "top"),
+        ("lamp_post", "none", "#2A2A30", 1.4, 1, "top"),
+        ("lamp_head", "#FFE8A8", "#2A2A30", 0.6, 1, "top"),
+        ("lamp_snow", "#F4F8FC", None, 1, 1, "top"),
+        ("pine", "#2E4A3A", "#1A2E22", 0.6, 1, "top"),
+        ("pine_snow", "#F4F8FC", None, 1, 1, "top"),
+        ("trunk", "#3A2A20", None, 1, 1, "top"),
+        ("bulb_r", "#FF5A5A", None, 1, 1, "top"),
+        ("bulb_y", "#FFD84A", None, 1, 1, "top"),
+        ("bulb_b", "#5AB8FF", None, 1, 1, "top"),
+        ("snowman", "#F8FAFC", "#B8C4D0", 0.6, 1, "top"),
+        ("snowman_hat", "#2A2A30", None, 1, 1, "top"),
+        ("snowman_scarf", "#C83A3A", None, 1, 1, "top"),
+        ("postbox", "#C83A3A", "#6A1A1A", 0.6, 1, "top"),
+        ("car", "#5A6A8A", "#2A3448", 0.6, 1, "top"),
+        ("car_snow", "#F4F8FC", None, 1, 1, "top"),
+        ("coal", "#1A1A1E", None, 1, 1, "top"),
+    ]
+
 # ====================================================================== write C#
 def emit(name, result):
     lay, order = result
@@ -642,6 +860,10 @@ results["StAgnes"] = stagnes()
 results["Larkspur"] = larkspur()
 results["Kestrel"] = kestrel()
 results["Ashgrove"] = ashgrove()
+results["CedarHollow"] = cedarhollow()
+results["Holloway"] = holloway()
+results["Crowhurst"] = crowhurst()
+results["Merriwick"] = merriwick()
 puddles = CONSTS.get('Puddles', [])
 
 cs = ["// <auto-generated> by tools/scenery/gen_scenery.py. Edit the generator, not this file. </auto-generated>",
@@ -654,7 +876,7 @@ cs = ["// <auto-generated> by tools/scenery/gen_scenery.py. Edit the generator, 
       "    /// <summary>St Agnes puddle centres, for rain glints.</summary>",
       "    public static readonly (double X, double Y)[] Puddles = [" + ", ".join(f"({x}, {y})" for x, y in puddles) + "];", "",
       "    public static Layer[] For(string scenarioId) => scenarioId switch",
-      "    {", '        "whitepine" => Whitepine,', '        "stagnes" => StAgnes,', '        "larkspur" => Larkspur,', '        "kestrel" => Kestrel,', '        "ashgrove" => Ashgrove,', "        _ => Gallowmouth", "    };", ""]
+      "    {", '        "whitepine" => Whitepine,', '        "stagnes" => StAgnes,', '        "larkspur" => Larkspur,', '        "kestrel" => Kestrel,', '        "ashgrove" => Ashgrove,', '        "cedarhollow" => CedarHollow,', '        "holloway" => Holloway,', '        "crowhurst" => Crowhurst,', '        "merriwick" => Merriwick,', "        _ => Gallowmouth", "    };", ""]
 previews = {}
 for name, res in results.items():
     lines, prev = emit(name, res)

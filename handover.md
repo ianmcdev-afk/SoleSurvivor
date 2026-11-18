@@ -1,6 +1,89 @@
 # Sole Survivor: handover
 
-## Status: v1.0.23 (Hand limit 7)
+## Status: v1.0.28 (Build fix)
+- MC3074 in `RulesWindow.xaml`: `Text="{swarm}"` was parsed as a markup extension. It's now escaped as `Text="{}{swarm}"`, like the other placeholders. Any XAML attribute that starts with `{` needs the `{}` prefix.
+
+## v1.0.27 (Tenth scenario: Merriwick, and the swarm)
+- **Merriwick** (`merriwick`): an original take on a Christmas-creature-feature (inspired by Gremlins, no film names, rules or looks). A market town on Christmas Eve. Survivor **Billie Hart** (toy-shop assistant). Killer **the Hatchmother** (wardrobe-tall, soot-black fur, a ring of tin-bright eyes, drags her nest). Swarm: **sootlings** (small soot-black furballs with two glowing eyes). Victims: shoppers; safe place: St Hilda's Church. Vehicle: Milk Float (range 2, `drive_cart`). No locked doors. Weather `Festive`: soft snow plus twinkling fairy-light strings top and bottom. Pub chimney smoke.
+- **Swarm mechanic (engine, scenario-driven):** `ScenarioDef.SwarmName/SwarmNames/SwarmStart/SwarmSpawn/SwarmMax/SwarmBite`, `HasSwarm`. Null `SwarmName` = no swarm, so the other nine scenarios are unaffected (sim numbers identical).
+  - `Game.Swarm` (per location), `SwarmTotal`, `SwarmHere`, `LastSwarmKilled`, `SwarmDamage(n)` = 0 for 1, 1 for 2–3, 2 for 4+ ("brave in numbers").
+  - `ResolveSwarm` runs after the killer's attack: every group moves one step toward you (killer pathing; a barred door stops them), then on cards where the killer attacks she spawns `SwarmSpawn` where she stands (+1 in the finale, capped at `SwarmMax`; new ones don't move until next turn), then any on you bite. Holding Breath −1, Repelled (salt/flash) blocks. New tide events `SwarmMoved`, `SwarmSpawned`, `SwarmBit`.
+  - Fighting: Weak Attack / Wild Swing / Desperate Plan are playable when the swarm is in your space. Each success kills one first (they shield her), the rest wound the killer if she's there. The flare also burns up to 2 in your space and is usable with only the swarm present.
+  - Starts spread over the lairs.
+- **UI:** sootlings drawn bottom-right of each location (up to 6 + ×N badge, bobbing); during the killer's turn `_swarmShown` replays moves (scuttle animation), spawns (ripple, "+1 sootling") and bites (flash, "−1 (sootlings)"). Killing them floats "−N sootlings". Killer panel shows the count; hints, briefing note and legend, and a "The swarm" rules section (hidden for other scenarios).
+- **Art/scenery/sound:** `gen_art.py` adds 8 Merriwick icons (church, market square with tree and milk float, toy shop, picture house, pub, bakery, department store, ice rink) and figures `Billie`, `Hatchmother`, `Sootling`. `gen_scenery.py` `merriwick()` (drifts, lamp posts with glow, decorated firs, snowmen, post boxes, snowed-in cars). `gen_sounds.py` adds `amb_merriwick` (wind, distant church peal, sleigh-bell jingles), `tide_merriwick` (town clock strikes, chittering) and `swarm`. All older art, scenery and WAVs verified unchanged.
+- **Balance (1500 games):** HealthBonus −3, SwarmStart 1, SwarmSpawn 1, SwarmMax 4. Easy 86.6%, Normal 68.9%, Hard 50.3%. Fuzz errors 0 across all ten.
+- The semantic checker baseline is now 15: the extra one is the same RulesWindow false positive (one more `.Replace` in the chain).
+
+## v1.0.26 (Rules tips wording)
+- The Bloodlust tip read as if {victims} never raise Bloodlust. It now says rescued {victims} can't be killed, so they can't feed it, and that each kill raises it by 1. No logic change: `KillVictims` → `RaiseBloodlust(taken)` was already correct.
+- The tips now cover keeping a move card (take Walk back in Planning) and E ending each phase.
+
+## v1.0.25 (Card-driven turns: Action phase, then Planning)
+- **Rule change:** every action needs a card. A turn is **1 ACTION** (play cards from hand: free) then **2 PLANNING** (buy from the Action Tableau with Time), then the killer's turn. This follows Final Girl: Time is spent when *buying*, not when playing.
+- **Engine (`Game.cs`):**
+  - `enum TurnStep { Action, Planning }`, `Step`, `InAction`, `InPlanning`. `EndActions()` (Action → Planning, clears unused move/escort tokens) and `EndTurn()` (Planning only: spent cards return to the tableau, then `ResolveTide`, then `StartRound`). `CanEndActions` / `CanEndTurn`.
+  - No free actions: public `Search`/`Fight`/`Rest`/`CanSearch`/`CanFight`/`CanRest` and all `Cost*` constants are gone. `Move` needs a `MoveToken`, `Escort` needs `EscortCost` escort tokens (2 with the Wounded special victim). No Time fallback.
+  - **Tableau:** `_tableau` holds every copy of `ActionCards.All`; `_spent` holds cards played, discarded or traded in for partials this turn and goes back to the tableau when Planning ends. `Tableau`, `SpentThisTurn`, `TableauCount(card)`, `CanBuy(card)` / `Buy(card)` / `BuyBlockedReason(card)` (Planning only; hand < 7; Time ≥ cost). The market (`_market`, `RefillMarket`, `MarketSize`, deck/discard) is removed.
+  - **Starting hand:** the six zero-cost basics (Walk ×2, Lead, Search, Weak Attack, Rest). `AwaitingStartPick` / `ChooseStartingCards` → `AwaitingStart` / `Begin()` (reveals the opening event).
+  - **Time:** resets to `TimePerRound` (+ event modifiers) each turn; doesn't carry over. `MaxTime` 12 (discards can push it over the per-turn amount). `StartTime` removed. Discard (+1 Time) works in both phases.
+  - Card changes in `Content.cs`: starters renamed (Walk, Lead, Search, Weak Attack, Rest) and they're buyable piles in the tableau. Sprint = 3 moves (cost 2, ×3), Shepherd = 2 escorts (2, ×3), Wild Swing ×3, Desperate Plan ×2. Scramble/Peek/Holler removed from the deck (enum values kept). Search (GlanceAround) rolls the full Horror dice.
+  - `UseBlockedReason` adds "only in your Action phase".
+- **UI:**
+  - Left panel: a phase tracker (1 ACTION › 2 PLANNING › 3 KILLER) with a line explaining the current phase replaces the Search/Fight/Rest tiles. Walk/Escort modes show moves/escorts ready from played cards and auto-switch when you play one. The big button reads END ACTIONS then END TURN; E does the same.
+  - **Planning overlay** (`PlanningOverlay`, replaces `StartPickOverlay`) opens on the board: one pile per card, sorted by cost, with stacked backs for count, "N left · N used · N in hand", and Buy / the reason it can't be bought. "See the board" tucks it away; reopen from the strip. During the Action phase the same overlay opens read-only ("Look at the tableau").
+  - The strip under the board: a narrow ACTION TABLEAU summary (cards and piles left, "used this turn", open button) and the hand gets the rest.
+  - The briefing's Continue reads "Got it: begin the night" and calls `BeginNight()` (opening event, ROUND 1 banner). Hints and the rules window are rewritten for the new turn.
+- **Sim:** `Bot.Act` / `Bot.Plan` (plays cards for moves/escorts/search/fight; buys movement, escorts, attacks when armed, healing when hurt) and `RandomBot`. New invariants: no buying in Action, no playing in Planning, tokens cleared at Planning, used cards return exactly, card count conserved across hand/tableau/spent, `BuyBlockedReason` agrees with `CanBuy`.
+- **Balance (1500 games):** Time per turn Easy 6 / Normal 5 / Hard 4; killer base health 20 / 23 / 25. HealthBonus changes: Whitepine +2 (was 0), Kestrel +4 (+2), Cedar Hollow +9 (+5), Crowhurst −4 (−3).
+
+  | Scenario | Easy | Normal | Hard |
+  |---|---|---|---|
+  | Gallowmouth | 88.9% | 73.3% | 47.7% |
+  | Whitepine | 88.6% | 67.7% | 51.0% |
+  | St Agnes | 88.0% | 73.8% | 49.5% |
+  | Larkspur Lane | 88.9% | 73.8% | 53.2% |
+  | Kestrel Motel | 89.5% | 74.9% | 55.3% |
+  | Ashgrove House | 83.2% | 67.6% | 47.2% |
+  | Cedar Hollow | 87.3% | 75.7% | 56.5% |
+  | Holloway Funfair | 85.4% | 69.6% | 47.3% |
+  | Crowhurst Farm | 81.8% | 64.3% | 46.5% |
+
+  Fuzz errors: 0. Easy is a little softer and Hard a little kinder than before (~35%); further tuning is a knob turn (`TimePerRound` / killer health).
+- **Note:** the 7-card hand limit is tight with six starting basics (Final Girl uses 10). It's kept at 7 as requested.
+
+## v1.0.24 (Three more scenarios: Cedar Hollow, Holloway Funfair, Crowhurst Farm)
+- **New scenarios:** originals inspired by Scream, Terrifier and Misery. No film characters, names or signature looks are used.
+
+  | Scenario (id) | Setting | Survivor | Killer | Doors and keys | Vehicle | Weather |
+  |---|---|---|---|---|---|---|
+  | **Cedar Hollow** (`cedarhollow`) | phone-stalker slasher | Jess Morrow | the Caller (letterman jacket, smooth featureless white mask with eye slits, cordless phone and knife) | Party House–Your House (Spare Key) | Pickup Truck (range 3) | Leaves; the sheriff's light bar blinks red/blue |
+  | **Holloway Funfair** (`holloway`) | Halloween funfair | Tasha Greene | the Merrymaker (silent clown, mustard/teal patchwork suit, green bowler, ash-grey face with a yellow star, strength-test mallet) | 2 locked doors into the Clown Caravans (Staff Key) | Golf Cart (range 2, `drive_cart`) | Carnival: chasing bulb strings and fog |
+  | **Crowhurst Farm** (`crowhurst`) | snowbound farmhouse | Daniel Reyes | the Devotee ("your most devoted reader": grey bun, knitted cardigan, hatchet, keys) | 3 locked doors around the Parlour and Spare Room (Iron Keys) | none | Blizzard: sideways snow and white gusts; light snow theme |
+
+- **Rule fix:** `KillerCanPass` means locked doors stop the killer only until the finale.
+  - Before this, a killer teleported into a locked-off lair could never reach you in the finale. The game stalled forever: 100+ sim games hit the 200-round guard on Holloway and Crowhurst.
+  - Killer pathing and `TidewifeNear` now use `KillerCanPass`. Survivor movement still uses `CanPass`.
+  - The rules and the briefing mention it. The fuzz invariant now allows crossing in the finale.
+- **Art:** `gen_art.py` has 24 more icons and 6 more figures (`Jess`, `Caller`, `Tasha`, `Merrymaker`, `Daniel`, `Devotee`). Themes and dispatch are in `ArtScenarios.cs`, the new weather is `AddLeaves`/`AddCarnival`/`AddBlizzard`, and `AddBlink` has a phase offset. The Crowhurst chimney sits on the Kitchen.
+- **Scenery:** generator functions `cedarhollow()` (autumn trees, leaf piles, jack-o'-lanterns, fences, lamps, cars), `holloway()` (sawdust, striped tents with pennants, hay bales, bins, popcorn carts, bulb poles) and `crowhurst()` (snowdrifts, snow-capped rail fences, hay, dead trees, pines, log piles). The six older maps' layers are verified unchanged.
+- **Sounds:**
+  - Ambient loops: `amb_cedarhollow` (gusting wind in leaves, crickets, a distant dog), `amb_holloway` (a far-off detuned calliope waltz) and `amb_crowhurst` (blizzard howl and fire crackle).
+  - Killer-turn stings: `tide_cedarhollow` (an old two-tone phone bell), `tide_holloway` (horn honks and a slide whistle) and `tide_crowhurst` (typewriter clacks and the carriage bell).
+  - Effect: `drive_cart`.
+  - The older WAVs are byte-identical.
+- **Scenario select:** `RenderScenarioCards` lays the cards out in two rows of ⌈n/2⌉ columns (card width ≤ 360), with a compact art height when there are more than 6. The title line now reads "Nine nights…" automatically.
+- **Balance (4000 games):**
+
+  | Scenario | HealthBonus | Easy | Normal | Hard |
+  |---|---|---|---|---|
+  | Cedar Hollow | +5 | 78.5% | 67.3% | 34.4% |
+  | Holloway Funfair | −2 | 82.7% | 66.9% | 37.4% |
+  | Crowhurst Farm | −3 | 75.2% | 64.0% | 41.3% |
+
+  The other six are essentially unchanged. The fuzzer reported 0 errors.
+
+## v1.0.23 (Hand limit 7)
 - **Rule:** `Game.HandLimit` is now 7 (was 4), and the rules text says so.
 - **Balance:** win rates moved by at most a few points (Normal 64–68%, Hard 30–35%), so health was left as it was.
 - **Hand strip:**

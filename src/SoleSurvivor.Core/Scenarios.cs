@@ -78,6 +78,20 @@ public sealed class ScenarioDef
     /// <summary>Background loop and stinger names; defaults are amb_{Id}.</summary>
     public string VehicleSound { get; init; } = "drive_car";
 
+    // The swarm: small creatures that spawn from the killer, chase you and nip for small damage. Null = no swarm.
+    /// <summary>One of the swarm, lower case: "sootling". Null if this scenario has no swarm.</summary>
+    public string? SwarmName { get; init; }
+    public string SwarmNames { get; init; } = "";
+    /// <summary>How many start on the board (spread over the lairs).</summary>
+    public int SwarmStart { get; init; }
+    /// <summary>How many the killer spawns where it stands, each of its turns (one more in the finale).</summary>
+    public int SwarmSpawn { get; init; } = 1;
+    /// <summary>Most that can be on the board at once.</summary>
+    public int SwarmMax { get; init; } = 8;
+    /// <summary>"nip and claw at you": what they do when they reach you.</summary>
+    public string SwarmBite { get; init; } = "swarm over you";
+    public bool HasSwarm => SwarmName is not null;
+
     public bool IsLockedEdge(int a, int b) => LockedEdges.Any(e => (e.A == a && e.B == b) || (e.A == b && e.B == a));
 
     /// <summary>The killer board's Bloodlust track, bottom (start) to top. Kills move the marker up.</summary>
@@ -235,6 +249,7 @@ public sealed class ScenarioDef
         if (LockedEdges.Length > 0 && KeyName is null) throw new InvalidOperationException($"{Id}: locked doors but no key name");
         if (Locations.Any(l => l.Stash.Contains(ItemKind.Vehicle)) && (VehicleName is null || VehicleRange < 2)) throw new InvalidOperationException($"{Id}: vehicle needs a name and range 2+");
         CheckKeysReachEverything();
+        if (HasSwarm && (SwarmNames.Length == 0 || SwarmMax < 1 || SwarmStart > SwarmMax || SwarmSpawn < 0)) throw new InvalidOperationException($"{Id}: bad swarm settings");
         if (BloodlustTrack.Length < 2 || BloodlustTrack.Any(l => l.Move < 1 || l.Attack < 1)) throw new InvalidOperationException($"{Id}: bad Bloodlust track");
         foreach (var (a, b) in Edges)
             if (a == b || a < 0 || b < 0 || a >= Locations.Length || b >= Locations.Length) throw new InvalidOperationException($"{Id}: bad edge {a}-{b}");
@@ -262,7 +277,7 @@ public static class Scenarios
         _current = scenario;
     }
 
-    public static IReadOnlyList<ScenarioDef> All => [Gallowmouth, Whitepine, StAgnes, Larkspur, Kestrel, Ashgrove];
+    public static IReadOnlyList<ScenarioDef> All => [Gallowmouth, Whitepine, StAgnes, Larkspur, Kestrel, Ashgrove, CedarHollow, Holloway, Crowhurst, Merriwick];
 
     public static ScenarioDef ById(string? id) => All.FirstOrDefault(s => s.Id == id) ?? Gallowmouth;
 
@@ -382,7 +397,7 @@ public static class Scenarios
         Survivor = new("Dana Okafor", "Dana", "Park ranger",
             "Twelve winters on these trails. She knows every shortcut. She has never seen tracks like these."),
         Killer = new("The Hollow Stag", "Hollow Stag", "It", "it",
-            "Antlers like dead branches, a body of frozen bark and bone. It walks on two legs when no one is watching."),
+            "Antlers like dead branches, a body of frozen bark and bone. It walks on two legs when no one is watching.", HealthBonus: 2),
         Victim = "camper", Victims = "campers",
         RoundWord = "gust",
         DeckName = "Storm card",
@@ -696,7 +711,7 @@ public static class Scenarios
         Survivor = new("Ruth Abernathy", "Ruth", "Local reporter",
             "Came to cover a story about a pirate TV signal. Watched the broadcast. Has until sign-off."),
         Killer = new("The Presenter", "Presenter", "He", "him",
-            "A tall man in a grey suit and a wide old tie, holding a studio microphone. Where his face should be there is only static, and sometimes, for a moment, your face.", HealthBonus: 2),
+            "A tall man in a grey suit and a wide old tie, holding a studio microphone. Where his face should be there is only static, and sometimes, for a moment, your face.", HealthBonus: 4),
         Victim = "guest", Victims = "guests",
         RoundWord = "broadcast",
         DeckName = "Signal card",
@@ -893,6 +908,439 @@ public static class Scenarios
             ("Candlelight", "The candles all gutter at once."),
             ("Provenance", "He knows where every heir came from, and where they'll go."),
             ("Into the Walls", "He steps back into the panelling and is gone."),
+        ],
+    };
+
+    // ================================================================== Cedar Hollow (phone-stalker slasher)
+
+    public static ScenarioDef CedarHollow { get; } = new()
+    {
+        Id = "cedarhollow",
+        Title = "Cedar Hollow",
+        Place = "Cedar Hollow",
+        Tagline = "Don't answer the phone.",
+        Blurb = "A sleepy town in October. Every one of your friends has had the same call tonight, and a masked caller who knows all the rules of a scary movie is working through the list. Somebody left the keys in a pickup.",
+        Intro = "Cedar Hollow, the night of the calls. Get your friends to the Sheriff's Station, and unmask the Caller.",
+        Survivor = new("Jess Morrow", "Jess", "High-school senior",
+            "Got the first call. Hung up. It rang straight back."),
+        Killer = new("The Caller", "Caller", "He", "him",
+            "A letterman jacket, a smooth white mask with two thin eye slits and no other features, a cordless phone in one hand and a kitchen knife in the other. He loves to talk.", HealthBonus: 9),
+        Victim = "friend", Victims = "friends",
+        RoundWord = "call",
+        DeckName = "Call card",
+        PhaseBanner = "THE PHONE IS RINGING",
+        FinaleName = "Final Act",
+        FinaleFlavour = "Every phone in Cedar Hollow rings at once. It's for you.",
+        FinaleTakes = "The lines go dead all over town",
+        FinaleBannerSub = "The last act. Now he hunts only you.",
+        ClaimText = "drags {0} out of sight",
+        MoveVerb = "walks", LingerVerb = "waits, breathing down the line",
+        RiseText = "steps out of a closet",
+        NobodyThere = "He checks an empty house, and hangs up.",
+        BarredRise = "The closet door bangs, but the chair under the handle holds.",
+        BarredDoor = "He tries the door, then calls you to say he'll wait.",
+        BarricadeText = "You shove a dresser against the door.",
+        LureText = "You call his number back.",
+        RepelText = "The air horn blasts in his face and he reels away.",
+        RepelUse = "You let off the air horn; he staggers back, clutching his ears.",
+        WinText = "The mask comes off. Sirens, at last, all over Cedar Hollow.",
+        LoseText = "The phone rings one last time. Nobody answers.",
+        FogName = "Power cut",
+        Locations =
+        [
+            new(0, "Sheriff's Station", "A deputy, a radio and a door that locks. Friends brought here are safe.", 400, 490, false, true, 0, [ItemKind.FlareGun]),
+            new(1, "Main Street", "Diner shut, cinema dark, a payphone ringing on the corner.", 400, 318, false, false, 2, [ItemKind.Rope, ItemKind.Bandages]),
+            new(2, "Video Store", "Rows of horror tapes. The clerk knows how these films end.", 150, 385, false, false, 1, [ItemKind.Lantern, ItemKind.BlessedSalt]),
+            new(3, "High School", "Lockers, a gym, and one classroom light left on.", 650, 318, false, false, 2, [ItemKind.BoatHook, ItemKind.Key]),
+            new(4, "Party House", "Music still playing, red cups everywhere, nobody in sight.", 150, 160, false, false, 2, [ItemKind.Bandages, ItemKind.GuttingKnife]),
+            new(5, "Your House", "Every door locked. The phone in the hall keeps ringing.", 400, 128, false, false, 0, [ItemKind.FlareGun, ItemKind.IronNails]),
+            new(6, "Old Barn", "Hay, a rope swing and tyre tracks in the mud.", 655, 140, true, false, 0, [ItemKind.BlessedSalt]),
+            new(7, "Football Field", "Floodlights humming over an empty pitch.", 655, 488, true, false, 1, [ItemKind.Vehicle, ItemKind.Lantern]),
+        ],
+        Edges = [(0, 1), (0, 2), (0, 7), (1, 2), (1, 3), (1, 4), (2, 4), (4, 5), (5, 6), (3, 6), (3, 7)],
+        LockedEdges = [(4, 5)],
+        KeyName = "Spare Key",
+        VehicleName = "Pickup Truck", VehicleRange = 3, VehicleVerb = "drive", VehicleSound = "drive_car",
+        SanctuaryId = 0,
+        KillerStart = 6,
+        SummonId = 5,
+        StartDread = 2,
+        BloodlustTrack =
+        [
+            new(1, 1),
+            new(1, 1, BloodlustEffect.DreadUp),
+            new(2, 1, BloodlustEffect.DreadUp),
+            new(2, 2, BloodlustEffect.DreadUp),
+            new(2, 2, BloodlustEffect.DreadUp),
+            new(2, 2, BloodlustEffect.Frenzy),
+            new(2, 2, BloodlustEffect.DreadUp),
+            new(3, 2, BloodlustEffect.DreadUp),
+            new(3, 3, BloodlustEffect.DreadUp),
+            new(3, 3, BloodlustEffect.DreadUp),
+            new(3, 3),
+        ],
+        ItemNames = ["Fire Poker", "Kitchen Knife", "Flashlight", "Extension Cord", "Flare Gun", "First-Aid Kit", "Air Horn", "Dresser"],
+        EventNames =
+        [
+            ("Best Friend", "\"Jess, I'm right behind you. Don't you dare die before the sequel.\""),
+            ("Twisted Ankle", "She tripped running from the party. She can't put weight on it."),
+            ("Pizza Delivery", "Somebody ordered hours ago. Still warm. Still free."),
+            ("Deputy's Bag", "A patrol car with its door open and its trunk unlocked."),
+            ("The Rules", "You know how these films go. You know what not to do."),
+            ("Adrenaline", "Heart pounding, legs burning, wide awake."),
+            ("Trip Wire", "Fishing line across the hallway, and a lot of pots and pans."),
+            ("Second Party", "Half the senior class, two streets over, music up loud."),
+            ("Caller ID: Unknown", "The phone rings. You know who it is."),
+            ("Storm Knocks the Lines Out", "The street lights die, one by one."),
+            ("He's Inside the House", "The call is coming from somewhere close. Very close."),
+            ("Another Name Crossed Off", "The list is getting shorter."),
+        ],
+        TideNames =
+        [
+            ("Ring Ring", "A phone rings in an empty house."),
+            ("Favourite Scary Movie", "\"Tell me your favourite scary movie.\""),
+            ("I Can See You", "\"Nice jacket. Turn around.\""),
+            ("Wrong Answer", "A trivia question, and a wrong answer."),
+            ("Power Cut", "The whole block goes dark."),
+            ("Party Crasher", "A kid in a costume stumbles out into the street."),
+            ("Call From Your House", "Your own number lights up on the screen."),
+            ("Behind You", "Not on the line any more. Behind you."),
+            ("Dial Tone", "He's hung up. For now."),
+            ("Hold the Line", "\"Don't hang up. I'm almost there.\""),
+            ("Body Count", "He's having fun tonight."),
+            ("Crowd Pleaser", "He steps out wherever the most friends have gathered."),
+            ("Last Bus Home", "Someone climbs off the night bus, alone."),
+            ("Heavy Breathing", "Your hands won't stop shaking."),
+            ("Commercial Break", "He stops, catches his breath, laughs at his own joke."),
+            ("Sprinklers", "Every lawn sprinkler comes on at once in the dark."),
+            ("Sequel", "There's always one more."),
+            ("Hang Up", "The line goes dead."),
+        ],
+    };
+
+    // ================================================================== Holloway Funfair (killer clown, Halloween)
+
+    public static ScenarioDef Holloway { get; } = new()
+    {
+        Id = "holloway",
+        Title = "Holloway Funfair",
+        Place = "Holloway Funfair",
+        Tagline = "The fun never stops. Ever.",
+        Blurb = "Halloween at a travelling funfair after closing. The rides start by themselves, and a silent clown with a mallet wants everyone to stay for one more turn. The maintenance golf cart still has some charge.",
+        Intro = "Holloway Funfair, Halloween, after closing. Get the stragglers to the Front Gate, and stop the Merrymaker's last show.",
+        Survivor = new("Tasha Greene", "Tasha", "Ride operator",
+            "Was closing up the waltzer. Saw a clown that wasn't on the staff list."),
+        Killer = new("The Merrymaker", "Merrymaker", "He", "him",
+            "A tall, silent clown in a mustard-and-teal patchwork suit and a green bowler hat, face painted ash-grey with a yellow star round one eye. He drags a fairground strength-test mallet.", HealthBonus: -2),
+        Victim = "straggler", Victims = "stragglers",
+        RoundWord = "show",
+        DeckName = "Showtime card",
+        PhaseBanner = "THE CALLIOPE STARTS PLAYING",
+        FinaleName = "Grand Finale",
+        FinaleFlavour = "Every ride lights up at once and the music won't stop.",
+        FinaleTakes = "The rides spin up with nobody left to ride them",
+        FinaleBannerSub = "The last show. Now he hunts only you.",
+        ClaimText = "takes {0} for one last ride",
+        MoveVerb = "skips", LingerVerb = "juggles, silently",
+        RiseText = "pops out of a prize booth",
+        NobodyThere = "He finds an empty queue, and honks his horn sadly.",
+        BarredRise = "The booth shutter rattles, but the padlock you snapped on holds.",
+        BarredDoor = "He knocks to a jaunty rhythm. The door holds.",
+        BarricadeText = "You pull down the shutter and padlock it.",
+        LureText = "You honk a bike horn.",
+        RepelText = "The fire extinguisher blasts him in a white cloud and he stumbles off.",
+        RepelUse = "You blast him with the extinguisher; he reels away, coughing silently.",
+        WinText = "The music winds down. The lights go out, ride by ride. The show is over.",
+        LoseText = "The calliope plays on. There's a new face on the poster.",
+        FogName = "Smoke machine",
+        Locations =
+        [
+            new(0, "Front Gate", "The turnstiles, a ticket hut and the car park beyond. Stragglers brought here are safe.", 400, 490, false, true, 0, [ItemKind.Bandages]),
+            new(1, "Midway", "Stalls, prizes and a cotton-candy machine still spinning.", 400, 318, false, false, 2, [ItemKind.Rope, ItemKind.FlareGun]),
+            new(2, "Hall of Mirrors", "A hundred of you. Some of them move a little late.", 150, 385, false, false, 2, [ItemKind.Lantern, ItemKind.BlessedSalt]),
+            new(3, "Ghost Train", "The cars rattle round on their own. Someone's screaming inside.", 650, 318, false, false, 2, [ItemKind.Bandages, ItemKind.Key]),
+            new(4, "Big Top", "Sawdust, a spotlight and a single chair in the ring.", 150, 160, false, false, 1, [ItemKind.BoatHook, ItemKind.Vehicle]),
+            new(5, "Ferris Wheel", "Turning slowly in the dark, a car swinging at the very top.", 400, 128, false, false, 1, [ItemKind.IronNails, ItemKind.GuttingKnife]),
+            new(6, "Clown Caravans", "Behind the staff gate. Grease paint, wigs and a mirror with lights.", 655, 140, true, false, 0, [ItemKind.FlareGun, ItemKind.BlessedSalt]),
+            new(7, "Funhouse", "A grinning mouth for a door, and floors that tilt.", 655, 488, true, false, 0, [ItemKind.GuttingKnife]),
+        ],
+        Edges = [(0, 1), (0, 2), (0, 7), (1, 2), (1, 3), (1, 5), (1, 4), (2, 4), (4, 5), (5, 6), (3, 6), (3, 7)],
+        LockedEdges = [(3, 6), (5, 6)],
+        KeyName = "Staff Key",
+        VehicleName = "Golf Cart", VehicleRange = 2, VehicleVerb = "drive", VehicleSound = "drive_cart",
+        SanctuaryId = 0,
+        KillerStart = 7,
+        SummonId = 5,
+        StartDread = 2,
+        BloodlustTrack =
+        [
+            new(1, 1),
+            new(1, 2, BloodlustEffect.DreadUp),
+            new(1, 2, BloodlustEffect.DreadUp),
+            new(2, 2, BloodlustEffect.DreadUp),
+            new(2, 2, BloodlustEffect.DreadUp),
+            new(2, 2, BloodlustEffect.Frenzy),
+            new(2, 3, BloodlustEffect.DreadUp),
+            new(2, 3, BloodlustEffect.DreadUp),
+            new(2, 3, BloodlustEffect.DreadUp),
+            new(3, 3, BloodlustEffect.DreadUp),
+            new(3, 3),
+        ],
+        ItemNames = ["Tent Mallet", "Box Cutter", "Head Torch", "Bunting Rope", "Firework Rocket", "First-Aid Kit", "Fire Extinguisher", "Ride Shutter"],
+        EventNames =
+        [
+            ("The Fortune Teller", "\"I saw this in the cards, love. Stay close and I'll see us out.\""),
+            ("Stuck on the Ride", "He jumped from the waltzer and landed badly. He needs an arm to lean on."),
+            ("Hot Doughnuts", "The fryer's still on. Sugar and grease and a moment's warmth."),
+            ("Lost and Found", "A crate behind the ticket hut, full of odd and useful things."),
+            ("Last Ride Home", "You've closed this fair a hundred times. You know every shortcut."),
+            ("Sugar Rush", "Candy floss and cola. Your heart is racing."),
+            ("Rigged Game", "You loosen the bolts on the coconut shy. Something heavy will fall."),
+            ("Trick or Treaters", "A gang of kids in costumes, sneaking in over the fence."),
+            ("Honk Honk", "A horn sounds in the dark, close by. Then another, closer."),
+            ("Generator Trips", "Half the fair goes black. The music doesn't stop."),
+            ("You're in the Show", "Your name, chalked on the big top's board, top of the bill."),
+            ("Encore", "Somewhere, the crowd applauds. There is no crowd."),
+        ],
+        TideNames =
+        [
+            ("Roll Up, Roll Up", "The calliope wheezes into life."),
+            ("Pick a Prize", "He knows where every straggler is hiding."),
+            ("Front Row Seat", "He waves at you. Only at you."),
+            ("Double Act", "He mimes something awful, very slowly."),
+            ("Smoke Machine", "Thick white smoke rolls across the Midway."),
+            ("Lost Child", "A kid in a witch costume, crying for her mum."),
+            ("Ferris Wheel Stops", "The wheel jerks to a halt with someone at the top."),
+            ("Pie in the Face", "He's chosen his next volunteer: you."),
+            ("Intermission", "The music stops. Just for a moment."),
+            ("Strength Test", "The mallet swings and the bell rings at the top."),
+            ("Showstopper", "He is enjoying himself enormously."),
+            ("Crowd Favourite", "He pops up wherever the most stragglers huddle."),
+            ("Ticket Holder", "Someone climbs back in over the fence for one more go."),
+            ("Cold Night", "Your breath clouds and your fingers stiffen."),
+            ("Fresh Greasepaint", "He touches up his star in a hand mirror, and his cuts close."),
+            ("Dry Ice", "Fog pours off the Ghost Train."),
+            ("Encore", "One more turn. Just one more."),
+            ("Exit Through the Gift Shop", "He takes a bow and is gone."),
+        ],
+    };
+
+    // ================================================================== Crowhurst Farm (the devoted reader, snowbound)
+
+    public static ScenarioDef Crowhurst { get; } = new()
+    {
+        Id = "crowhurst",
+        Title = "Crowhurst Farm",
+        Place = "Crowhurst Farm",
+        Tagline = "She only wants the ending to be perfect.",
+        Blurb = "You crashed in a blizzard and woke up in a farmhouse, nursed by your most devoted reader. Tonight you finally got out of the spare room. Anyone she's 'looking after' needs to reach the lane before the snowplough passes. Every door in the house locks.",
+        Intro = "Crowhurst Farm, the night of the blizzard. Get everyone she's keeping down to the Lane, and close the last chapter on the Devotee.",
+        Survivor = new("Daniel Reyes", "Daniel", "Crime novelist",
+            "Walks with a stick since the crash. Knows exactly how stories like this end, and is trying very hard to write a different one."),
+        Killer = new("The Devotee", "Devotee", "She", "her",
+            "Your most devoted reader. Neat grey bun, a long knitted cardigan and a sweet, patient smile. She keeps every key in the house, and a hatchet by the stove.", HealthBonus: -4),
+        Victim = "visitor", Victims = "visitors",
+        RoundWord = "chapter",
+        DeckName = "Chapter card",
+        PhaseBanner = "SHE'S COMING UP THE STAIRS",
+        FinaleName = "The Last Chapter",
+        FinaleFlavour = "The snowplough has gone by. Nobody is coming. She's very disappointed in you.",
+        FinaleTakes = "The blizzard closes the lane",
+        FinaleBannerSub = "No more visitors. Now she hunts only you.",
+        ClaimText = "locks {0} away upstairs",
+        MoveVerb = "walks", LingerVerb = "hums a hymn",
+        RiseText = "is simply there, by the door, smiling",
+        NobodyThere = "She tidies an empty room, and is gone.",
+        BarredRise = "The door handle turns, but the chair under it holds.",
+        BarredDoor = "She tries the door, then sighs through the keyhole.",
+        BarricadeText = "You jam a chair under the handle.",
+        LureText = "You knock over a vase. She hates mess.",
+        RepelText = "You rip a page out of the manuscript and she freezes, horrified.",
+        RepelUse = "You hold the manuscript over the fire; she backs away, pleading.",
+        WinText = "The last chapter is yours. Blue lights at the end of the lane, at last.",
+        LoseText = "She tucks you back into bed. You'll write it her way now.",
+        FogName = "Whiteout",
+        Locations =
+        [
+            new(0, "The Lane", "The snowplough comes by here. Visitors brought here can flag it down and get away.", 400, 490, false, true, 0, [ItemKind.FlareGun]),
+            new(1, "Farmyard", "Knee-deep snow, a frozen water pump and her car with no tyres.", 400, 318, false, false, 2, [ItemKind.Rope, ItemKind.Key]),
+            new(2, "Barn", "Hay, a tractor and the cows she lets nobody touch.", 150, 385, false, false, 2, [ItemKind.BoatHook, ItemKind.Lantern]),
+            new(3, "Kitchen", "A warm stove, a pie cooling, and the hatchet missing from its hook.", 650, 318, false, false, 2, [ItemKind.Bandages, ItemKind.GuttingKnife]),
+            new(4, "Chicken Coop", "Feathers everywhere, and fresh footprints in the snow.", 150, 160, true, false, 1, [ItemKind.IronNails]),
+            new(5, "Parlour", "Your books on every shelf. Your photo on the mantelpiece.", 400, 128, false, false, 0, [ItemKind.BlessedSalt, ItemKind.Bandages, ItemKind.Key]),
+            new(6, "Spare Room", "Where she kept you. The typewriter is still warm.", 655, 140, true, false, 0, [ItemKind.FlareGun, ItemKind.BlessedSalt]),
+            new(7, "Woodshed", "Logs stacked to the roof, and a chopping block.", 655, 488, true, false, 1, [ItemKind.Lantern, ItemKind.Bandages]),
+        ],
+        Edges = [(0, 1), (0, 2), (0, 7), (1, 2), (1, 3), (1, 5), (2, 4), (4, 5), (5, 6), (3, 6), (3, 7)],
+        LockedEdges = [(1, 5), (3, 6), (5, 6)],
+        KeyName = "Iron Key",
+        SanctuaryId = 0,
+        KillerStart = 3,
+        SummonId = 6,
+        StartDread = 2,
+        BloodlustTrack =
+        [
+            new(1, 1),
+            new(1, 2, BloodlustEffect.DreadUp),
+            new(1, 2, BloodlustEffect.DreadUp),
+            new(1, 2, BloodlustEffect.DreadUp),
+            new(2, 2, BloodlustEffect.DreadUp),
+            new(2, 2, BloodlustEffect.Frenzy),
+            new(2, 3, BloodlustEffect.DreadUp),
+            new(2, 3, BloodlustEffect.DreadUp),
+            new(2, 3, BloodlustEffect.DreadUp),
+            new(2, 3, BloodlustEffect.DreadUp),
+            new(2, 3),
+        ],
+        ItemNames = ["Walking Stick", "Carving Knife", "Storm Lantern", "Baling Twine", "Shotgun Shell", "Painkillers", "The Manuscript", "Chair"],
+        EventNames =
+        [
+            ("The Deputy", "\"Sir? You're the writer, aren't you? Stay behind me.\""),
+            ("Frostbitten", "She's been out in the snow for hours. She can barely walk."),
+            ("Pot of Tea", "Still hot, and for once nobody has put anything in it."),
+            ("Her Sewing Box", "Scissors, needles, thread, and something useful underneath."),
+            ("Your Own Words", "You remember a chapter you wrote. Your hero got out. So can you."),
+            ("Cold Air", "The freezing wind wakes you right up."),
+            ("Loose Floorboard", "Prise it up, and leave a hole she won't see coming."),
+            ("Stranded Drivers", "Two cars in the ditch at the bottom of the lane, headlights on."),
+            ("She Read Ahead", "She knows what you're planning. She's read it before."),
+            ("Power Lines Down", "The farmhouse goes dark. Only the stove glows."),
+            ("Her Favourite Character", "She'd like you to stay. Forever, ideally."),
+            ("A Rewrite", "She didn't like how that one ended."),
+        ],
+        TideNames =
+        [
+            ("Tea Time", "The kettle whistles in the kitchen."),
+            ("Bed Check", "She counts the visitors, one by one."),
+            ("Dear Author", "\"I'm your biggest admirer. You know that, don't you?\""),
+            ("House Rules", "No mess. No noise. No leaving."),
+            ("Whiteout", "Snow blows sideways across the yard."),
+            ("Knock at the Door", "Someone stumbles up the lane out of the snow."),
+            ("The Spare Room", "The typewriter starts clacking, all by itself."),
+            ("Your Chapter", "She's decided it's your turn."),
+            ("Snowplough", "Headlights, far off. A moment's hope."),
+            ("Housekeeping", "She's very good at keeping house."),
+            ("Disappointed", "She is so, so disappointed."),
+            ("Visiting Hours", "She appears wherever the most visitors are."),
+            ("Lost in the Snow", "Someone wanders in from the blizzard."),
+            ("Frostbite", "Your fingers won't close."),
+            ("Mending", "She sits by the stove and bandages her hands."),
+            ("Snowfall", "Thick, soft, silent snow."),
+            ("Second Draft", "She goes back to do it properly this time."),
+            ("Upstairs", "Her footsteps creak away up the stairs."),
+        ],
+    };
+
+    // ================================================================== Merriwick (a small town, Christmas Eve, a multiplying brood)
+
+    public static ScenarioDef Merriwick { get; } = new()
+    {
+        Id = "merriwick",
+        Title = "Merriwick",
+        Place = "Merriwick",
+        Tagline = "Something in the toy shop is multiplying.",
+        Blurb = "Christmas Eve in a little market town. A crate from a house clearance was opened in the toy-shop cellar, and something was nesting in it. Now the snow is full of small, quick, soot-black things, and their mother is still growing. Get the late shoppers into the church, where the bells keep them back.",
+        Intro = "Merriwick, Christmas Eve. Lead the shoppers to St Hilda's Church, keep the sootlings off you, and put the Hatchmother down for good.",
+        Survivor = new("Billie Hart", "Billie", "Toy-shop assistant",
+            "Seventeen Christmases behind the counter. Knows every shortcut, every shopkeeper and every alley in town. Opened the crate."),
+        Killer = new("The Hatchmother", "Hatchmother", "She", "her",
+            "Wardrobe-tall and hunched, matted with soot-black fur, with a ring of round, tin-bright eyes. She drags her swollen nest behind her through the snow, and every time the town clock chimes, more of her little ones climb out.", HealthBonus: -3),
+        Victim = "shopper", Victims = "shoppers",
+        RoundWord = "chime",
+        DeckName = "Chime card",
+        PhaseBanner = "THE CLOCK CHIMES",
+        FinaleName = "Midnight Mass",
+        FinaleFlavour = "The church doors close for midnight. The streets belong to the brood now.",
+        FinaleTakes = "The church doors bolt for midnight",
+        FinaleBannerSub = "No more shoppers. Now the whole brood hunts only you.",
+        ClaimText = "drags {0} down into the cellar",
+        MoveVerb = "scuttles", LingerVerb = "broods over her nest",
+        RiseText = "bursts up out of a drain in a shower of soot",
+        NobodyThere = "She snuffles through an empty shop, and is gone.",
+        BarredRise = "Claws scrape at the shutter, but it holds.",
+        BarredDoor = "She throws herself at the shutters, and they hold.",
+        BarricadeText = "You haul the shop shutters down with a crash.",
+        LureText = "You set off a shop alarm. Every eye in the brood turns towards it.",
+        RepelText = "The camera flash goes off in her eyes and she shrieks, blinded.",
+        RepelUse = "You fire the flash right in her face; she reels away, clawing at her eyes.",
+        WinText = "She bursts into soot and cinders, and the whole brood with her. The church bells ring in Christmas morning.",
+        LoseText = "The brood closes over you, and the snow covers everything.",
+        FogName = "Snowstorm",
+        SwarmName = "sootling",
+        SwarmNames = "sootlings",
+        SwarmStart = 1,
+        SwarmSpawn = 1,
+        SwarmMax = 4,
+        SwarmBite = "nip and scratch at you",
+        Locations =
+        [
+            new(0, "St Hilda's Church", "Candles, carols and bells. The brood won't come in while the bells ring.", 400, 490, false, true, 0, [ItemKind.FlareGun]),
+            new(1, "Market Square", "A tall tree strung with lights, and a milk float abandoned mid-round.", 400, 318, false, false, 2, [ItemKind.Rope, ItemKind.Vehicle]),
+            new(2, "Toy Shop", "Where it started. Wrapping paper everywhere, and a broken crate in the cellar.", 650, 140, true, false, 0, [ItemKind.FlareGun, ItemKind.BlessedSalt]),
+            new(3, "Picture House", "The Christmas matinee is still running to an empty, scratching audience.", 150, 160, true, false, 1, [ItemKind.IronNails, ItemKind.Lantern]),
+            new(4, "The Holly Bush", "A pub with a roaring fire, and a darts board nobody's using.", 150, 385, false, false, 2, [ItemKind.BoatHook, ItemKind.Bandages]),
+            new(5, "Bakery", "Mince pies on the racks, and flour footprints leading out the back.", 650, 318, false, false, 2, [ItemKind.GuttingKnife, ItemKind.Bandages]),
+            new(6, "Department Store", "Four floors of Christmas, and the escalators are still running.", 400, 128, false, false, 1, [ItemKind.BlessedSalt, ItemKind.Bandages, ItemKind.Lantern]),
+            new(7, "Ice Rink", "Fairy lights over the ice, and long, thin scratches across it.", 655, 488, false, false, 0, [ItemKind.IronNails, ItemKind.Bandages]),
+        ],
+        Edges = [(0, 1), (0, 4), (0, 7), (1, 4), (1, 5), (1, 6), (3, 4), (3, 6), (2, 6), (2, 5), (5, 7)],
+        VehicleName = "Milk Float",
+        VehicleRange = 2,
+        VehicleVerb = "drive",
+        VehicleSound = "drive_cart",
+        SanctuaryId = 0,
+        KillerStart = 2,
+        SummonId = 3,
+        BloodlustTrack =
+        [
+            new(1, 1),
+            new(1, 1),
+            new(1, 1, BloodlustEffect.DreadUp),
+            new(1, 2, BloodlustEffect.DreadUp),
+            new(2, 2, BloodlustEffect.DreadUp),
+            new(2, 2, BloodlustEffect.Frenzy),
+            new(2, 2, BloodlustEffect.DreadUp),
+            new(2, 3, BloodlustEffect.DreadUp),
+            new(2, 3, BloodlustEffect.DreadUp),
+            new(2, 3, BloodlustEffect.DreadUp),
+            new(2, 3),
+        ],
+        ItemNames = ["Cricket Bat", "Cake Knife", "Bike Lamp", "Fairy Lights", "Firework Rocket", "First Aid Kit", "Camera Flash", "Shop Shutters"],
+        EventNames =
+        [
+            ("PC Okafor", "\"I've seen some things on Christmas Eve, but never this. Stay close.\""),
+            ("Bitten Badly", "The sootlings got to him first. He can hardly walk."),
+            ("Hot Chocolate", "A flask from the market stall, still steaming."),
+            ("Lost Property", "The station's lost-property box: you never know what's in there."),
+            ("Carol Singers", "Somewhere, a choir is still singing. You can do this."),
+            ("Sugar Rush", "Three mince pies and a can of fizzy pop. You're wide awake."),
+            ("Mousetrap", "A big old spring trap from the bakery. Set it where you stand."),
+            ("Last Bus In", "The last bus from the city pulls in, full of shoppers."),
+            ("Scratching in the Walls", "They're in the walls. They're everywhere."),
+            ("Power Cut", "Every light on the high street goes out at once."),
+            ("She's Picked Up Your Scent", "Every eye in the brood turns towards you."),
+            ("Feeding Time", "She's hungry, and her nest is growing."),
+        ],
+        TideNames =
+        [
+            ("Window Shopping", "She presses her eyes to the glass, one shop after another."),
+            ("Unwrapped", "A present on a doorstep is torn open from the inside."),
+            ("Tin Eyes", "A ring of bright little eyes, all turned your way."),
+            ("Last Orders", "The pub door swings in the wind."),
+            ("Snowstorm", "The snow comes down so thick you can't see the tree."),
+            ("Stragglers", "A family runs out of the department store, laughing, unaware."),
+            ("Matinee", "The film flickers on in the Picture House. Something is watching it."),
+            ("Hide and Seek", "She's playing a game, and you're it."),
+            ("Gritter Lorry", "The gritter rumbles past, and she has to wait for it."),
+            ("Up the Chimney", "Soot falls from the chimney beside you."),
+            ("Wrapping Paper", "Ribbons and shredded paper skitter along the pavement."),
+            ("Late-Night Opening", "She goes where the crowd is thickest."),
+            ("Lost Child", "A little boy in a bobble hat, looking for his mum."),
+            ("Cold Snap", "The cold bites through your gloves."),
+            ("Nesting", "She curls up over her nest and licks her wounds."),
+            ("Frost Fog", "Freezing fog rolls down the high street."),
+            ("Twelve Days", "On the twelfth chime, something else wakes up."),
+            ("Back to the Nest", "She scuttles home to her nest."),
         ],
     };
 }

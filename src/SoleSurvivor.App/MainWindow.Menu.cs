@@ -67,7 +67,7 @@ public partial class MainWindow
                 PauseSub.Text = $"{_game.Scenario.Title}  ·  {_game.Scenario.Survivor.Name}  ·  round {_game.Round}";
                 break;
         }
-        RenderStartPick();
+        RenderPlanning();
     }
 
     private void HideMenu()
@@ -182,18 +182,24 @@ public partial class MainWindow
     private void RenderScenarioCards()
     {
         ScenarioCards.Children.Clear();
+        // Lay the cards out in two rows (three if there are only a few), as wide as fits the 1600-wide screen.
+        int count = Scenarios.All.Count;
+        int columns = count <= 3 ? count : (int)Math.Ceiling(count / 2.0);
+        double cardWidth = Math.Min(360, 1440.0 / columns - 16);
+        bool compact = count > 6;
+        ScenarioCards.MaxWidth = columns * (cardWidth + 16) + 1;
         foreach (var sc in Scenarios.All)
         {
             var scenario = sc;
             bool selected = sc == _pickScenario;
             var theme = Art.ThemeFor(sc.Id);
 
-            var art = new Grid { Height = 104 };
+            var art = new Grid { Height = compact ? 92 : 104 };
             art.ColumnDefinitions.Add(new ColumnDefinition());
             art.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             art.ColumnDefinitions.Add(new ColumnDefinition());
-            var you = new Viewbox { Child = Art.Survivor(sc.Id).Root, Height = 76, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 0, 8) };
-            var them = new Viewbox { Child = Art.Killer(sc.Id).Root, Height = 94, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 0, 6) };
+            var you = new Viewbox { Child = Art.Survivor(sc.Id).Root, Height = compact ? 66 : 76, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 0, 8) };
+            var them = new Viewbox { Child = Art.Killer(sc.Id).Root, Height = compact ? 82 : 94, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 0, 6) };
             var vs = new TextBlock { Text = "vs", FontFamily = new FontFamily("Georgia"), FontStyle = FontStyles.Italic, FontSize = 18, Foreground = Art.Dim, VerticalAlignment = VerticalAlignment.Center };
             Grid.SetColumn(vs, 1);
             Grid.SetColumn(them, 2);
@@ -212,7 +218,7 @@ public partial class MainWindow
 
             var body = new StackPanel();
             body.Children.Add(artFrame);
-            body.Children.Add(new TextBlock { Text = sc.Title, FontFamily = new FontFamily("Georgia"), FontSize = 22, FontWeight = FontWeights.Bold, Foreground = Art.Warm });
+            body.Children.Add(new TextBlock { Text = sc.Title, FontFamily = new FontFamily("Georgia"), FontSize = compact ? 20 : 22, FontWeight = FontWeights.Bold, Foreground = Art.Warm, TextTrimming = TextTrimming.CharacterEllipsis });
             body.Children.Add(new TextBlock { Text = sc.Tagline, FontFamily = new FontFamily("Georgia"), FontStyle = FontStyles.Italic, FontSize = 12.5, Foreground = Art.Dim, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 1, 0, 6) });
             var who = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 12.5, Margin = new Thickness(0, 0, 0, 4) };
             who.Inlines.Add(new System.Windows.Documents.Run("You  ") { Foreground = Art.Dim });
@@ -237,7 +243,7 @@ public partial class MainWindow
             var card = new Button
             {
                 Style = (Style)FindResource("ActionButton"),
-                Width = 360,
+                Width = cardWidth,
                 Margin = new Thickness(8, 0, 8, 14),
                 Padding = new Thickness(12, 10, 12, 10),
                 HorizontalContentAlignment = HorizontalAlignment.Stretch,

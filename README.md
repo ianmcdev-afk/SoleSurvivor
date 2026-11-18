@@ -1,6 +1,6 @@
 # Sole Survivor
 
-A solo, turn-based horror board game for Windows (WPF / .NET 8). You use dice, action cards, a Horror track, a killer deck with a Bloodlust killer board, event cards, and a finale, across six original scenarios:
+A solo, turn-based horror board game for Windows (WPF / .NET 8). Every action comes from a card: each turn you play cards (Action phase), then spend Time buying cards for next turn from the Action Tableau (Planning phase). You also have dice, a Horror track, a killer deck with a Bloodlust killer board, event cards, and a finale, across ten original scenarios:
 
 | Scenario | Survivor | Killer | Rescue | Safe place |
 |---|---|---|---|---|
@@ -10,10 +10,14 @@ A solo, turn-based horror board game for Windows (WPF / .NET 8). You use dice, a
 | **Larkspur Lane** (a suburb where sleep kills) | Maya Castillo, insomniac | The Lullaby Man | sleepers | All-Night Diner |
 | **Kestrel Motel** (a roadside motel and a cursed broadcast) | Ruth Abernathy, local reporter | The Presenter | guests | Gas Station |
 | **Ashgrove House** (a sealed country house) | Clara Voss, estate valuer | The Curator | heirs | Foyer |
+| **Cedar Hollow** (a small town and a masked caller) | Jess Morrow, high-school senior | The Caller | friends | Sheriff's Station |
+| **Holloway Funfair** (a funfair on Halloween night) | Tasha Greene, ride operator | The Merrymaker | stragglers | Front Gate |
+| **Crowhurst Farm** (a snowbound farmhouse) | Daniel Reyes, crime novelist | The Devotee | visitors | The Lane |
+| **Merriwick** (a market town on Christmas Eve) | Billie Hart, toy-shop assistant | The Hatchmother, and her swarm of sootlings | shoppers | St Hilda's Church |
 
-Larkspur Lane, the Kestrel Motel and Ashgrove House add **locked doors** (which need a key and block everyone, including the killer) and, outdoors, a **vehicle** (bicycle or station wagon) that moves you 2 or 3 spaces at a time.
+The six newer scenarios add **locked doors** (which need a key and block everyone, including the killer, until the finale) and most have a **vehicle** (bicycle, station wagon, pickup truck, golf cart or milk float) that moves you 2 or 3 spaces at a time. In Merriwick the killer also has a **swarm**: small sootlings that spawn from her, creep towards you each turn and nip for small damage once two or more reach you.
 
-The game opens on a title screen with Continue, New game, Options, How to play and Quit. New game leads to a scenario-select screen, then an objective briefing with a map of where to bring people to safety (reopen it any time with the Objective button), and Esc pauses during play. There's sound throughout: effects for dice, cards, footsteps, the killer and the finale, plus an ambient loop per scenario (sea, wind, rain, a distant music box, TV hum, a ticking clock) and a killer-turn sting for each of the new places. Mute with the header button or M. Options (default difficulty, animation speed, volume, ambient sound, weather and ambient effects, hints, full screen, window size) are saved to `%AppData%\SoleSurvivor\settings.json`. The full rules are in the in-game **How to play** window, worded for the scenario you're playing.
+The game opens on a title screen with Continue, New game, Options, How to play and Quit. New game leads to a scenario-select screen, then an objective briefing with a map of where to bring people to safety (reopen it any time with the Objective button), and Esc pauses during play. There's sound throughout: effects for dice, cards, footsteps, the killer and the finale, plus an ambient loop per scenario (sea, wind, rain, a distant music box, TV hum, a ticking clock, autumn wind, a funfair calliope, a blizzard, church bells in the snow) and a killer-turn sting for each of the newer places. Mute with the header button or M. Options (default difficulty, animation speed, volume, ambient sound, weather and ambient effects, hints, full screen, window size) are saved to `%AppData%\SoleSurvivor\settings.json`. The full rules are in the in-game **How to play** window, worded for the scenario you're playing.
 
 ## Run it
 
@@ -32,7 +36,7 @@ In Visual Studio, you can instead right-click SoleSurvivor.App, choose **Publish
 
 ```powershell
 .\publish.ps1 -Installer
-# -> installer\Output\SoleSurvivor-Setup-1.0.23.exe
+# -> installer\Output\SoleSurvivor-Setup-1.0.28.exe
 ```
 
 The installer is per-user by default (no admin needed). It adds a Start-menu shortcut, an optional desktop icon and an uninstaller. The version comes from `Directory.Build.props`.

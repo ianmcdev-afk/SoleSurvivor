@@ -15,11 +15,11 @@ public partial class MainWindow : Window
 
     /// <summary>What the board looked like before an action, so we can animate the difference.</summary>
     private sealed record Snapshot(int Survivor, int Tidewife, int[] Villagers, int Health, int TidewifeHealth, int Saved, DiceRoll? Roll,
-        int Time, int HandCount, int MarketCount, int InventoryCount, int HorrorDice, int Locked)
+        int Time, int HandCount, int TableauCount, int InventoryCount, int HorrorDice, int Locked, int[] Swarm)
     {
         public Snapshot(Game g)
             : this(g.SurvivorLocation, g.TidewifeLocation, g.Villagers.ToArray(), g.Health, g.TidewifeHealth, g.VillagersSaved, g.LastRoll,
-                   g.Time, g.Hand.Count, g.Market.Count, g.Inventory.Count, g.HorrorDice, g.LockedDoors.Count()) { }
+                   g.Time, g.Hand.Count, g.Tableau.Count, g.Inventory.Count, g.HorrorDice, g.LockedDoors.Count(), g.Swarm.ToArray()) { }
     }
 
     private static bool _clickSoundRegistered;
@@ -81,9 +81,10 @@ public partial class MainWindow : Window
         Title = $"Sole Survivor: {_game.Scenario.Title} ({_game.Difficulty})";
         ResetFigures();
         _stage = Stage.YourTurn;
-        _startPicks.Clear();
+        _planningHidden = false;
+        _peekTableau = false;
         Render();
-        ShowBriefing(); // the objective first; the starting-card picker and ROUND 1 banner follow
+        ShowBriefing(); // the objective first; the opening event and ROUND 1 banner follow
     }
 
     // ================================================================ input
@@ -132,7 +133,7 @@ public partial class MainWindow : Window
         {
             Sound.Play("round", 0.7);
             await ShowBannerAsync($"ROUND {_game.Round}",
-                _game.InFinale ? $"Your turn. Survive the {_game.Scenario.FinaleName}." : $"Your turn. You have {_game.Time} Time.", Art.Warm);
+                _game.InFinale ? $"Action phase. Survive the {_game.Scenario.FinaleName}." : $"Action phase. Play cards to act. {_game.Time} Time for Planning.", Art.Warm);
         }
     }
 
@@ -166,7 +167,21 @@ public partial class MainWindow : Window
 
     private void HideOverlay_Click(object sender, RoutedEventArgs e) => GameOverOverlay.Visibility = Visibility.Collapsed;
 
-    private void EndTurn_Click(object sender, RoutedEventArgs e) => DoEndTurn();
+    private void EndTurn_Click(object sender, RoutedEventArgs e) => DoEndStep();
+
+    /// <summary>The big button and E: end the Action phase (go to Planning), or end Planning (the killer's turn).</summary>
+    private void DoEndStep()
+    {
+        if (_busy) return;
+        if (_game.CanEndActions)
+        {
+            _game.EndActions();
+            _planningHidden = false;
+            Sound.Play("card_flip", 0.6);
+            Render();
+        }
+        else if (_game.CanEndTurn) DoEndTurn();
+    }
 
     private void Window_KeyDown(object sender, KeyEventArgs e)
     {
@@ -201,10 +216,10 @@ public partial class MainWindow : Window
             return;
         }
         if (MenuOpen) return;
-        if (e.Key == Key.E && !_busy && _game.CanEndTurn && GameOverOverlay.Visibility != Visibility.Visible)
+        if (e.Key == Key.E && !_busy && (_game.CanEndActions || _game.CanEndTurn) && GameOverOverlay.Visibility != Visibility.Visible)
         {
             e.Handled = true;
-            DoEndTurn();
+            DoEndStep();
         }
     }
 
@@ -213,12 +228,6 @@ public partial class MainWindow : Window
     private void TideCard_Click(object sender, MouseButtonEventArgs e) => SkipCard();
 
     private void Mode_Click(object sender, RoutedEventArgs e) => Render();
-
-    private void Search_Click(object sender, RoutedEventArgs e) => Perform(() => _game.Search());
-
-    private void Fight_Click(object sender, RoutedEventArgs e) => Perform(() => _game.Fight());
-
-    private void Rest_Click(object sender, RoutedEventArgs e) => Perform(() => _game.Rest());
 
     private void Steel_Click(object sender, RoutedEventArgs e)
     {

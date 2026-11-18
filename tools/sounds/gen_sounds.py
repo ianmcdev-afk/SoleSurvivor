@@ -318,10 +318,136 @@ def unlock():
     x = mix(at(turn, 0.0, dur), at(clack, 0.14, dur), at(clack * 0.7, 0.3, dur))
     save('unlock', reverb(x, 0.2, 0.4), 0.6)
 
+# ------------------------------------------------------------------ Cedar Hollow, Holloway, Crowhurst
+def amb_cedarhollow():
+    dur = 15.0; n = noise(dur); tt = np.linspace(0, dur, len(n))
+    gust = 0.35 + 0.65 * (0.5 + 0.5 * np.sin(2 * np.pi * tt / 5.0 + 1.3 * np.sin(tt / 1.7)))
+    rustle = bp(n, 1800, 6000) * gust * 0.35 + lp(noise(dur), 250) * 0.3
+    crickets = np.zeros(len(n))
+    for _ in range(int(dur * 1.5)):
+        c = bp(noise(0.05), 4200, 5200) * env(int(SR * .05), 0.002, 0.04, 8)
+        crickets += at(mix(*[at(c, j * 0.07, 0.25) for j in range(3)]) * rng.uniform(0.08, 0.18), rng.uniform(0, dur - 0.3), dur)
+    dog = np.zeros(len(n))
+    for t0 in (4.0, 4.5):
+        bark = bp(noise(0.12), 400, 1400) * env(int(SR * .12), 0.005, 0.1, 5) * 0.25
+        dog += at(bark, t0, dur)
+    save('amb_cedarhollow', loop(rustle + crickets + lp(dog, 2000)), 0.3)
+
+def amb_holloway():
+    dur = 16.0; out = np.zeros(int(SR * dur))
+    # A wheezy, slightly detuned calliope playing an oom-pah waltz, far off.
+    melody = [523.3, 659.3, 784.0, 659.3, 587.3, 698.5, 880.0, 698.5, 523.3, 659.3, 784.0, 1046.5, 987.8, 784.0, 659.3, 587.3]
+    beat = 0.45
+    for i, f in enumerate(melody * 3):
+        tpos = i * beat
+        if tpos > dur - 0.5: break
+        nn = int(SR * beat * 0.9)
+        pipe = (tone(f * 0.992, beat * 0.9) + 0.5 * tone(f * 2.01, beat * 0.9) + 0.3 * tone(f * 1.5, beat * 0.9)) * adsr(nn, 0.02, 0.1)
+        out += at(pipe * 0.18, tpos, dur)
+        if i % 3 == 0: out += at(tone(f / 4, beat * 0.4, 'tri') * adsr(int(SR * beat * 0.4), 0.01, 0.1) * 0.25, tpos, dur)
+    out = lp(reverb(out, 0.5, 1.4)[:int(SR * dur)], 2500)
+    hum = 0.3 * lp(noise(dur), 180) + 0.06 * tone(50, dur)
+    save('amb_holloway', loop(out + hum), 0.3)
+
+def amb_crowhurst():
+    dur = 14.0; n = noise(dur); tt = np.linspace(0, dur, len(n))
+    howl = np.zeros(len(n)); centre = 650 + 400 * np.sin(2 * np.pi * tt / 6.0) ** 2
+    for i in range(0, len(n), 1024):
+        seg = slice(i, i + 1024); c = centre[i]
+        howl[seg] = bp(n, c * 0.75, c * 1.3)[seg]
+    howl *= 0.5 + 0.5 * np.sin(2 * np.pi * tt / 6.0) ** 2
+    crackle = np.zeros(len(n))
+    for _ in range(140):
+        c = hp(noise(0.006), 2500) * env(int(SR * .006), 0.0005, 0.005, 10) * rng.uniform(0.1, 0.4)
+        crackle += at(c, rng.uniform(0, dur - 0.02), dur)
+    fire = lp(noise(dur), 300) * 0.25
+    save('amb_crowhurst', loop(howl * 0.6 + crackle + fire), 0.32)
+
+def tide_cedarhollow():
+    # An old two-tone telephone bell: ring-ring, pause, ring-ring.
+    dur = 2.6; out = np.zeros(int(SR * dur))
+    for t0 in (0.0, 1.4):
+        nn = int(SR * 0.9); tt = np.arange(nn) / SR
+        trill = np.sign(np.sin(2 * np.pi * 20 * tt))
+        bell = (tone(1350, 0.9) + 0.7 * tone(1650, 0.9) + 0.4 * tone(2700, 0.9)) * (0.6 + 0.4 * trill) * adsr(nn, 0.005, 0.05)
+        out += at(lp(bell, 4500), t0, dur)
+    save('tide_cedarhollow', out, 0.6)
+
+def tide_holloway():
+    dur = 1.9
+    honk_n = int(SR * 0.35)
+    honk = (np.sign(np.sin(2 * np.pi * np.cumsum(np.full(honk_n, 340.0)) / SR)) * 0.6 + tone(680, 0.35)) * adsr(honk_n, 0.01, 0.06)
+    slide = tone(np.linspace(1400, 300, int(SR * 1.0)), 1.0) * adsr(int(SR * 1.0), 0.02, 0.2) * 0.6
+    x = mix(at(lp(honk, 2500), 0.0, dur), at(lp(honk, 2500), 0.42, dur), at(slide, 0.85, dur))
+    save('tide_holloway', reverb(x, 0.25, 0.8), 0.65)
+
+def tide_crowhurst():
+    dur = 2.4; out = np.zeros(int(SR * dur))
+    t0 = 0.0
+    for k in range(11):
+        key = bp(noise(0.03), 1200, 4500) * env(int(SR * .03), 0.001, 0.025, 10) + 0.4 * lp(noise(0.03), 300) * env(int(SR * .03), 0.001, 0.02, 10)
+        out += at(key * 0.8, t0, dur); t0 += rng.uniform(0.08, 0.16)
+    ding = (tone(2093, 1.0) + 0.4 * tone(4186, 1.0)) * env(int(SR * 1.0), 0.002, 0.9, 4) * 0.6
+    out += at(ding, t0 + 0.05, dur)
+    save('tide_crowhurst', reverb(out, 0.2, 0.5), 0.65)
+
+def drive_cart():
+    dur = 1.2; tt = t(dur)
+    whine = tone(380 + 260 * np.clip(tt / 0.5, 0, 1), dur) * 0.4 + 0.15 * tone(760 + 520 * np.clip(tt / 0.5, 0, 1), dur)
+    rumble = lp(noise(dur), 400) * 0.3
+    save('drive_cart', (whine + rumble) * adsr(len(tt), 0.1, 0.35), 0.4)
+
+# ------------------------------------------------------------------ Merriwick
+def amb_merriwick():
+    # Soft wind through a snowy town, a church peal far off, and now and then a jingle of bells.
+    dur = 16.0; n = noise(dur); tt = np.linspace(0, dur, len(n))
+    wind = bp(n, 300, 1400) * (0.4 + 0.3 * np.sin(2 * np.pi * tt / 7.0) ** 2) * 0.5
+    peal = np.zeros(len(n))
+    notes = [784.0, 698.5, 659.3, 587.3, 523.3, 493.9]   # a ring of six, rung down the scale
+    for r in range(2):
+        for k, f in enumerate(notes):
+            nn = int(SR * 1.6)
+            b = (tone(f, 1.6) + 0.5 * tone(f * 2.76, 1.6) + 0.3 * tone(f * 5.4, 1.6)) * env(nn, 0.003, 1.4, 3)
+            peal += at(b * 0.12, 1.0 + r * 7.0 + k * 0.42, dur)
+    peal = lp(reverb(peal, 0.6, 1.6)[:len(n)], 1800)
+    jingle = np.zeros(len(n))
+    for t0 in (5.0, 12.5):
+        for j in range(9):
+            c = bp(noise(0.06), 5000, 9000) * env(int(SR * .06), 0.001, 0.05, 8) * rng.uniform(0.05, 0.12)
+            jingle += at(c, t0 + j * rng.uniform(0.05, 0.11), dur)
+    save('amb_merriwick', loop(wind + peal + jingle), 0.3)
+
+def tide_merriwick():
+    # The town clock strikes, and something small chitters back.
+    dur = 2.6; out = np.zeros(int(SR * dur))
+    for t0 in (0.0, 0.9):
+        nn = int(SR * 1.6)
+        bong = (tone(196, 1.6) + 0.6 * tone(392 * 1.01, 1.6) + 0.35 * tone(196 * 2.92, 1.6)) * env(nn, 0.004, 1.5, 3)
+        out += at(bong * 0.55, t0, dur)
+    out = reverb(out, 0.35, 1.2)[:len(out)]
+    for k in range(14):
+        c = bp(noise(0.02), 2500, 6500) * env(int(SR * .02), 0.001, 0.015, 10) * rng.uniform(0.2, 0.45)
+        out += at(c, 1.7 + k * rng.uniform(0.035, 0.06), dur)
+    save('tide_merriwick', out, 0.65)
+
+def swarm():
+    # Many tiny claws on cobbles, and a squeak or two.
+    dur = 0.8; out = np.zeros(int(SR * dur))
+    for k in range(30):
+        c = bp(noise(0.012), 2000, 7000) * env(int(SR * .012), 0.0005, 0.01, 10) * rng.uniform(0.2, 0.6)
+        out += at(c, rng.uniform(0, dur - 0.05), dur)
+    for t0 in (0.15, 0.45):
+        nn = int(SR * 0.09)
+        sq = tone(np.linspace(2600, 3400, nn) + 300 * np.sin(np.linspace(0, 20, nn)), 0.09) * adsr(nn, 0.01, 0.04) * 0.3
+        out += at(sq, t0, dur)
+    save('swarm', out, 0.55)
+
 for fn in [click, card_flip, card_buy, card_discard, dice, chime_up, found, nothing, heal, bell,
            step, hit_killer, miss, killer_move, killer_strike, taken, tide_sting, finale, win, lose,
            sea, wind, rain, amb_larkspur, amb_kestrel, amb_ashgrove, tide_larkspur, tide_kestrel, tide_ashgrove,
-           drive_car, drive_bike, unlock]:
+           drive_car, drive_bike, unlock,
+           amb_cedarhollow, amb_holloway, amb_crowhurst, tide_cedarhollow, tide_holloway, tide_crowhurst, drive_cart,
+           amb_merriwick, tide_merriwick, swarm]:
     fn()
 files = sorted(f for f in os.listdir(OUT) if f.endswith('.wav'))
 print(len(files), 'sounds,', sum(os.path.getsize(os.path.join(OUT, f)) for f in files) // 1024, 'KB')

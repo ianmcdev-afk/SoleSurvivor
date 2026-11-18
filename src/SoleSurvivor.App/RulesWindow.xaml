@@ -28,23 +28,19 @@
                            Text="{}{intro}"/>
 
                 <TextBlock Style="{StaticResource H}" Text="Reading the screen"/>
-                <TextBlock Style="{StaticResource P}" Text="The bar across the top shows where you are in the round: YOUR TURN › {DECK} › {SHE} MOVES › {SHE} ATTACKS. The glowing step is happening now, and the hint beside it tells you what to do."/>
-                <TextBlock Style="{StaticResource P}" Text="On the board, places you can go right now are ringed in gold and joined to you by moving dotted paths. ✦ badges show how many things are still hidden at a location. Small figures are {victims} waiting to be rescued."/>
+                <TextBlock Style="{StaticResource P}" Text="The bar across the top shows where you are in the round: YOUR TURN › {DECK} › {SHE} MOVES › {SHE} ATTACKS, and the tracker on the left shows which phase of your turn you're in. The glowing step is happening now, and the hint beside it tells you what to do."/>
+                <TextBlock Style="{StaticResource P}" Text="On the board, places you can go with the moves you have (from cards you've played) are ringed in gold and joined to you by moving dotted paths. ✦ badges show how many things are still hidden at a location. Small figures are {victims} waiting to be rescued."/>
                 <TextBlock Style="{StaticResource P}" Text="When {killer} takes {her} turn, {her} card flips up in the middle of the board and stays there until you click, so you can read it. Tick 'Fast animations' in the header to speed everything up."/>
 
                 <TextBlock Style="{StaticResource H}" Text="How you win"/>
                 <TextBlock Style="{StaticResource P}" Text="Wound {killer} until {her} health reaches 0. You lose if your own health reaches 0. Along the way, lead {victims} to the {sanctuary}. Every {victim} {she} kills raises {her} Bloodlust, so saving people keeps {her} weaker."/>
 
                 <TextBlock Style="{StaticResource H}" Text="Your turn"/>
-                <TextBlock Style="{StaticResource P}" Text="You gain Time at the start of each round. You can hold up to 8, and anything you don't spend carries over. Spend it on these actions, in any order and as often as you can afford:"/>
-                <TextBlock Style="{StaticResource P}" Text="•  Walk (1): move to a connected location. Click a highlighted location on the board."/>
-                <TextBlock Style="{StaticResource P}" Text="•  Escort (1): move and bring up to 2 {victims} from your location with you (3 with the {rope}). {Victims} who reach the {sanctuary} are saved, and each one gives you 1 Hope."/>
-                <TextBlock Style="{StaticResource P}" Text="•  Search (2): roll your Horror dice, plus 1 for a light. Each success finds one item hidden at your location, up to 2."/>
-                <TextBlock Style="{StaticResource P}" Text="•  Fight (2): only when {she}'s in your location. Roll your Horror dice plus 1 per weapon. Each success is a wound."/>
-                <TextBlock Style="{StaticResource P}" Text="•  Rest (2): heal 1, but not while {she}'s beside you."/>
-                <TextBlock Style="{StaticResource P}" Text="Starting cards: before round 1 you pick 3 of 5 free starter cards (Quick Step, Guide, Shove, Glance Around, Catch Your Breath). They cost nothing, wait in your hand, and are gone once played or discarded."/>
-                <TextBlock Style="{StaticResource P}" Text="Some market cards are FREE (Scramble, Peek, Holler): take them without spending Time. They're small on their own, but every card in your hand is something to trade in for a partial die."/>
-                <TextBlock Style="{StaticResource P}" Text="Five action cards are offered in the market each round, in the strip under the board. Buy them with Time and they go into your hand, beside the market (7 cards at most). Playing a card from your hand is free, this turn or a later one. Cards you don't buy are swept away at the end of the round. Any card in your hand can also be discarded for +1 Time, up to the 8 Time limit."/>
+                <TextBlock Style="{StaticResource P}" Text="Everything you do needs a card. There are no free actions: you can't move without a move card, escort without an escort card, search, fight or rest without the card for it. Your turn has two phases, shown in the tracker on the left: 1 ACTION, then 2 PLANNING. Then it's {killer}'s turn."/>
+                <TextBlock Style="{StaticResource P}" Text="1 ACTION. Play cards from your hand, in any order. Playing a card is free. Walk gives 1 move and Sprint gives 3: click a glowing place on the board to go there. Lead gives 1 escort and Shepherd 2: switch to Escort and click toward the {sanctuary}, bringing up to 2 {victims} from your location (3 with the {rope}). Search rolls your Horror dice (plus 1 for a light) to find what's hidden here, up to 2 things. Weak Attack, Wild Swing and Desperate Plan fight {killer} when {she}'s in your location. Rest heals 1. Moves and escorts you don't use are lost when the phase ends. Press END ACTIONS (or E)."/>
+                <TextBlock Style="{StaticResource P}" Text="2 PLANNING. Buy cards for next turn from the Action Tableau with Time. You get the same Time every turn (Easy 6, Normal 5, Hard 4), and it doesn't carry over: spend it or lose it. A card's cost is the number in its corner. The basics (Walk, Lead, Search, Weak Attack, Rest) cost 0, so you can always take them back. Bought cards go into your hand (7 cards at most) and wait there until you play them. Press END TURN (or E)."/>
+                <TextBlock Style="{StaticResource P}" Text="Cards you play or discard don't go straight back to the tableau: they're greyed out as 'used this turn' and return when your Planning phase ends. So a Sprint you played this turn can't be bought again until next turn."/>
+                <TextBlock Style="{StaticResource P}" Text="At any point in your turn you can discard a card from your hand for +1 Time (up to 12). You start the night holding the six basics."/>
 
                 <TextBlock Style="{StaticResource H}" Text="The Horror track: dice, Hope and Dread"/>
                 <TextBlock Style="{StaticResource P}" Text="The Horror track decides how many dice you roll. Uneasy (Dread 1-2): 3 Horror dice. Afraid (Dread 3-5): 2. Terror (Dread 6+) and the finale: 1. Fight and Search start from your Horror dice; weapons, light and cards add to them. You always roll at least 1 die. Spend 1 Hope to steel yourself and add a die to your next roll. Dread rises when {her} Bloodlust reaches a ☠ level, and some {deck}s raise it too. At Dread 8 the {finale} begins."/>
@@ -56,7 +52,7 @@
                 <TextBlock Style="{StaticResource P}" Text="Every {victim} {she} kills moves Bloodlust up one level, so {she} gets faster and hits harder. Some levels trigger once when reached: ☠ raises your Dread by 1, ♥ (Frenzy) heals {her} 2. Once the track is full, every further kill heals {her} 1. A barred door keeps {her} out of your location for one {round}."/>
 
                 <TextBlock Style="{StaticResource H}" Text="Locked doors, keys and vehicles"/>
-                <TextBlock Style="{StaticResource P}" Text="Some places have locked doors, shown as a gold padlock on the road. Nobody walks through a locked door, {killer} included, though {she} can still appear on the far side. Carry a key and walk (or escort) through it to unlock it for good; the key is used up, and the door is open for everyone from then on. Keys are found by searching."/>
+                <TextBlock Style="{StaticResource P}" Text="Some places have locked doors, shown as a gold padlock on the road. Nobody walks through a locked door, {killer} included, though {she} can still appear on the far side. In the {finale}, nothing stops {her}: locked doors included. Carry a key and walk (or escort) through it to unlock it for good; the key is used up, and the door is open for everyone from then on. Keys are found by searching."/>
                 <TextBlock Style="{StaticResource P}" Text="Some places have a vehicle to find, such as a bicycle or a car. While you have it, one walk or escort can take you up to 2 or 3 spaces along the roads for the same cost; reachable places further away are marked with a blue route. You can't drive through a locked door, or through {killer}'s space, though you can stop there."/>
 
                 <TextBlock Style="{StaticResource H}" Text="Events"/>
@@ -66,11 +62,15 @@
                 <TextBlock Style="{StaticResource H}" Text="The {finale} (finale)"/>
                 <TextBlock Style="{StaticResource P}" Text="The {finale} comes when the {deck}s run out or Dread reaches 8. Every {victim} still out there is lost. {She} gains 3 health and from then on hunts only you, moving 1 more and attacking for 1 more than {her} Bloodlust says, every {round}. Finish it."/>
 
+                <TextBlock x:Name="SwarmHeading" Style="{StaticResource H}" Text="The swarm"/>
+                <TextBlock x:Name="SwarmRules" Style="{StaticResource P}" Text="{}{swarm}"/>
+
                 <TextBlock Style="{StaticResource H}" Text="Tips"/>
-                <TextBlock Style="{StaticResource P}" Text="•  Early on, rescues pay twice: the {victim} can't raise {her} Bloodlust, and you get Hope."/>
+                <TextBlock Style="{StaticResource P}" Text="•  Rescues pay twice: you get 1 Hope, and a {victim} who is safe at the {sanctuary} can't be killed, so {she} can't use them to raise {her} Bloodlust. Every {victim} {she} does kill raises it by 1."/>
                 <TextBlock Style="{StaticResource P}" Text="•  Pick up a weapon or two before you go looking for a fight. Places marked ✦ still hide something."/>
                 <TextBlock Style="{StaticResource P}" Text="•  The {flare} and the {salt} also work from an adjacent location."/>
-                <TextBlock Style="{StaticResource P}" Text="•  Press E to end your turn, Esc for the menu, M to mute the sound."/>
+                <TextBlock Style="{StaticResource P}" Text="•  Always keep a move card for next turn. In Planning, take back Walk (it costs 0) before spending Time on anything else."/>
+                <TextBlock Style="{StaticResource P}" Text="•  Press E to end your Action phase, then E again to end Planning. Esc opens the menu, M mutes the sound."/>
             </StackPanel>
         </ScrollViewer>
     </DockPanel>
