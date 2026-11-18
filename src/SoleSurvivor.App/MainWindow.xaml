@@ -1,0 +1,539 @@
+<Window x:Class="SoleSurvivor.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Sole Survivor"
+        Width="1600" Height="900" MinWidth="800" MinHeight="450"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource BgBrush}"
+        Foreground="{StaticResource TextBrush}"
+        FontFamily="Segoe UI" FontSize="13"
+        KeyDown="Window_KeyDown">
+    <!-- The whole game is laid out at 1600x900 and scaled to fit the window, whatever its size. -->
+    <Viewbox x:Name="RootScale" Stretch="Uniform">
+    <Grid x:Name="DesignSurface" Width="1600" Height="900">
+      <Grid x:Name="GameRoot">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <DockPanel Grid.Row="0" Margin="18,10,18,4" LastChildFill="False">
+            <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock x:Name="HeaderTitle" Text="SOLE SURVIVOR" FontFamily="Georgia" FontSize="30" FontWeight="Bold" Foreground="{StaticResource AccentBrush}"/>
+                <TextBlock x:Name="HeaderSubtitle" Text="" FontFamily="Georgia" FontStyle="Italic"
+                           Foreground="{StaticResource DimBrush}" FontSize="15" VerticalAlignment="Bottom" Margin="14,0,0,5"/>
+            </StackPanel>
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock x:Name="HeaderDifficulty" VerticalAlignment="Center" Foreground="{StaticResource DimBrush}" Margin="0,0,14,0"/>
+                <Button x:Name="MuteButton" Content="♪  Sound on" Style="{StaticResource ActionButton}" HorizontalContentAlignment="Center" Width="110" Margin="0,0,8,0" Click="Mute_Click"/>
+                <Button Content="How to play" Style="{StaticResource ActionButton}" HorizontalContentAlignment="Center" Width="110" Margin="0,0,8,0" Click="Rules_Click"/>
+                <Button Content="☰  Menu  (Esc)" Style="{StaticResource ActionButton}" HorizontalContentAlignment="Center" Width="120" Click="Menu_Click"/>
+            </StackPanel>
+        </DockPanel>
+
+        <!-- Phase tracker: where are we in the round? -->
+        <Border Grid.Row="1" Margin="18,4,18,6" Style="{StaticResource Panel}" Padding="10,8">
+            <DockPanel LastChildFill="True">
+                <Border DockPanel.Dock="Left" x:Name="RoundBadge" Background="#0B1418" BorderBrush="{StaticResource WarmBrush}" BorderThickness="1.5"
+                        CornerRadius="8" Padding="12,2" Margin="0,0,14,0" VerticalAlignment="Center">
+                    <StackPanel>
+                        <TextBlock x:Name="RoundNumber" Text="ROUND 1" FontFamily="Georgia" FontWeight="Bold" FontSize="17" Foreground="{StaticResource WarmBrush}" HorizontalAlignment="Center"/>
+                        <TextBlock x:Name="TideLeftText" Text="18 tide cards left" FontSize="11" Foreground="{StaticResource DimBrush}" HorizontalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+                <StackPanel DockPanel.Dock="Left" x:Name="PhaseChips" Orientation="Horizontal" VerticalAlignment="Center"/>
+                <TextBlock x:Name="HintText" Margin="18,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap" FontSize="13.5"/>
+            </DockPanel>
+        </Border>
+
+        <!-- Main area: you on the left, the board in the middle, the killer on the right.
+             Everything is laid out for 1600x900 and the whole window scales to fit, so nothing ever scrolls. -->
+        <Grid Grid.Row="2" Margin="14,0,14,12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="330"/>
+                <ColumnDefinition Width="10"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="10"/>
+                <ColumnDefinition Width="340"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Left: you -->
+            <Border Grid.Column="0" Style="{StaticResource Panel}" Padding="0">
+                <DockPanel>
+                    <Button x:Name="EndTurnButton" DockPanel.Dock="Bottom" Style="{StaticResource BigButton}" Margin="10,6,10,10" Click="EndTurn_Click">
+                        <StackPanel HorizontalAlignment="Center">
+                            <TextBlock Text="END TURN" HorizontalAlignment="Center"/>
+                            <TextBlock x:Name="EndTurnSub" Text="press E" FontFamily="Segoe UI" FontSize="11" FontWeight="Normal" Foreground="{StaticResource DimBrush}" HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Grid Margin="10,8,10,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <StackPanel Grid.Row="0">
+                            <!-- Wren -->
+                            <Border Background="#16282F" CornerRadius="10" Padding="10" BorderBrush="#33E8B634" BorderThickness="1">
+                                <DockPanel>
+                                    <Border x:Name="SurvivorPortraitHost" DockPanel.Dock="Left" Margin="0,0,12,0" VerticalAlignment="Top"/>
+                                    <StackPanel>
+                                        <TextBlock x:Name="SurvivorName" Text="Survivor" FontFamily="Georgia" FontSize="16" FontWeight="Bold" Foreground="{StaticResource WarmBrush}"/>
+                                        <TextBlock x:Name="SurvivorWhere" Foreground="{StaticResource DimBrush}" FontSize="12" Margin="0,0,0,4"/>
+                                        <StackPanel Orientation="Horizontal" Margin="0,1">
+                                            <TextBlock Text="Health" Width="52" Foreground="{StaticResource DimBrush}" VerticalAlignment="Center"/>
+                                            <StackPanel x:Name="HealthPips" Orientation="Horizontal"/>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Margin="0,1">
+                                            <TextBlock Text="Time" Width="52" Foreground="{StaticResource DimBrush}" VerticalAlignment="Center"/>
+                                            <StackPanel x:Name="TimePips" Orientation="Horizontal"/>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Margin="0,1">
+                                            <TextBlock Text="Hope" Width="52" Foreground="{StaticResource DimBrush}" VerticalAlignment="Center"/>
+                                            <StackPanel x:Name="HopePips" Orientation="Horizontal"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </DockPanel>
+                            </Border>
+                            <!-- Dread -->
+                            <Border Background="#16282F" CornerRadius="10" Padding="10,8" Margin="0,8,0,0">
+                                <StackPanel>
+                                    <DockPanel>
+                                        <TextBlock Text="HORROR TRACK" FontWeight="Bold" FontSize="11" Foreground="{StaticResource DimBrush}"/>
+                                        <TextBlock x:Name="DreadText" HorizontalAlignment="Right" FontWeight="Bold"/>
+                                    </DockPanel>
+                                    <Grid x:Name="DreadGauge" Margin="0,4,0,4"/>
+                                    <TextBlock x:Name="ThresholdText" FontSize="11.5" Foreground="{StaticResource DimBrush}" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                        <StackPanel Grid.Row="1">
+                            <!-- Actions -->
+                            <TextBlock Text="Actions" Style="{StaticResource SideTitle}"/>
+                            <UniformGrid Columns="2" Margin="0,0,0,6">
+                                <RadioButton x:Name="WalkMode" GroupName="MoveMode" IsChecked="True" Style="{StaticResource ModeToggle}" Margin="0,0,3,0" Click="Mode_Click">
+                                    <StackPanel>
+                                        <TextBlock Text="➤  Walk" FontWeight="Bold"/>
+                                        <TextBlock x:Name="WalkModeText" FontSize="11" Foreground="{StaticResource DimBrush}"/>
+                                    </StackPanel>
+                                </RadioButton>
+                                <RadioButton x:Name="EscortMode" GroupName="MoveMode" Style="{StaticResource ModeToggle}" Margin="3,0,0,0" Click="Mode_Click">
+                                    <StackPanel>
+                                        <TextBlock Text="♟♟  Escort" FontWeight="Bold"/>
+                                        <TextBlock x:Name="EscortModeText" FontSize="11" Foreground="{StaticResource DimBrush}"/>
+                                    </StackPanel>
+                                </RadioButton>
+                            </UniformGrid>
+                            <TextBlock x:Name="TokensText" Foreground="{StaticResource AccentBrush}" Margin="0,0,0,4" TextWrapping="Wrap"/>
+                            <UniformGrid Columns="3">
+                                <Button x:Name="SearchButton" Style="{StaticResource TileButton}" Margin="0,0,4,0" Click="Search_Click"/>
+                                <Button x:Name="FightButton" Style="{StaticResource TileButton}" Margin="2,0,2,0" Click="Fight_Click"/>
+                                <Button x:Name="RestButton" Style="{StaticResource TileButton}" Margin="4,0,0,0" Click="Rest_Click"/>
+                            </UniformGrid>
+                            <CheckBox x:Name="SteelCheck" Foreground="{StaticResource TextBrush}" Margin="0,8,0,0" Click="Steel_Click"
+                                      Content="✦ Steel yourself: 1 Hope for +1 die next roll"/>
+                        </StackPanel>
+                        <StackPanel Grid.Row="2">
+                            <!-- Dice -->
+                            <TextBlock x:Name="DiceTitle" Text="Dice" Style="{StaticResource SideTitle}"/>
+                            <Border Background="#0E2A22" CornerRadius="10" Padding="8,6" BorderBrush="#2A4A3E" BorderThickness="1" MinHeight="56">
+                                <StackPanel>
+                                    <WrapPanel x:Name="DicePanel"/>
+                                    <TextBlock x:Name="DiceText" Foreground="{StaticResource DimBrush}" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                        <!-- Items: shrink to fit rather than scroll -->
+                        <TextBlock Grid.Row="3" Text="Items" Style="{StaticResource SideTitle}"/>
+                        <Viewbox Grid.Row="5" Stretch="Uniform" StretchDirection="DownOnly" VerticalAlignment="Top" HorizontalAlignment="Left">
+                            <StackPanel x:Name="ItemsPanel" Width="306"/>
+                        </Viewbox>
+                    </Grid>
+                </DockPanel>
+            </Border>
+
+            <!-- Middle: board, market and hand -->
+            <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="8"/>
+                    <RowDefinition Height="196"/>
+                </Grid.RowDefinitions>
+
+                <Border x:Name="BoardFrame" Grid.Row="0" Style="{StaticResource Panel}" Padding="4" Background="#0A2229">
+                    <Viewbox Stretch="Uniform">
+                        <Grid Width="800" Height="580" ClipToBounds="True">
+                            <Canvas x:Name="SceneLayer" IsHitTestVisible="False"/>
+                            <Canvas x:Name="AmbientLayer" IsHitTestVisible="False"/>
+                            <Canvas x:Name="RouteLayer" IsHitTestVisible="False"/>
+                            <Canvas x:Name="IconLayer" IsHitTestVisible="False"/>
+                            <Canvas x:Name="InfoLayer"/>
+                            <Canvas x:Name="TokenLayer" IsHitTestVisible="False"/>
+                            <Canvas x:Name="FogLayer" IsHitTestVisible="False"/>
+                            <Canvas x:Name="FxLayer" IsHitTestVisible="False"/>
+
+                            <!-- Red pulse when you are hurt -->
+                            <Border x:Name="DamageVignette" Opacity="0" IsHitTestVisible="False">
+                                <Border.Background>
+                                    <RadialGradientBrush RadiusX="0.75" RadiusY="0.75">
+                                        <GradientStop Color="#00C8553D" Offset="0.45"/>
+                                        <GradientStop Color="#B0C8553D" Offset="1"/>
+                                    </RadialGradientBrush>
+                                </Border.Background>
+                            </Border>
+                            <!-- Sea wash for the Spring Tide -->
+                            <Border x:Name="FloodOverlay" Opacity="0" IsHitTestVisible="False" Background="#5A1E6A7A"/>
+                            <Border x:Name="FinaleTint" Opacity="0" IsHitTestVisible="False" Background="#22155A6A"/>
+
+                            <!-- Big phase banner -->
+                            <Border x:Name="PhaseBanner" Opacity="0" IsHitTestVisible="False" VerticalAlignment="Top" Margin="0,170,0,0"
+                                    Padding="40,14" HorizontalAlignment="Center" CornerRadius="10" BorderThickness="2"
+                                    Background="#E00B1418" BorderBrush="{StaticResource WarmBrush}" RenderTransformOrigin="0.5,0.5">
+                                <Border.RenderTransform>
+                                    <ScaleTransform x:Name="BannerScale" ScaleX="1" ScaleY="1"/>
+                                </Border.RenderTransform>
+                                <StackPanel>
+                                    <TextBlock x:Name="BannerTitle" FontFamily="Georgia" FontSize="34" FontWeight="Bold" HorizontalAlignment="Center"/>
+                                    <TextBlock x:Name="BannerSub" FontFamily="Georgia" FontStyle="Italic" FontSize="15" Foreground="{StaticResource DimBrush}" HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Tide card reveal -->
+                            <Border x:Name="TideCardOverlay" Visibility="Collapsed" Width="250" Height="340" CornerRadius="14" BorderThickness="2.5"
+                                    BorderBrush="{StaticResource DangerBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                    RenderTransformOrigin="0.5,0.5" MouseLeftButtonUp="TideCard_Click" Cursor="Hand">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                        <GradientStop Color="#FF3A1F1C" Offset="0"/>
+                                        <GradientStop Color="#FF160E0E" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                                <Border.Effect>
+                                    <DropShadowEffect Color="#C8553D" BlurRadius="40" ShadowDepth="0" Opacity="0.7"/>
+                                </Border.Effect>
+                                <Border.RenderTransform>
+                                    <TransformGroup>
+                                        <ScaleTransform x:Name="TideCardScale" ScaleX="1" ScaleY="1"/>
+                                        <TranslateTransform x:Name="TideCardShift"/>
+                                    </TransformGroup>
+                                </Border.RenderTransform>
+                                <StackPanel Margin="18,16">
+                                    <TextBlock x:Name="TideCardLabel" Text="≋  TIDE CARD  ≋" FontSize="11" FontWeight="Bold" Foreground="{StaticResource DangerBrush}" HorizontalAlignment="Center"/>
+                                    <TextBlock x:Name="TideCardName" FontFamily="Georgia" FontSize="24" FontWeight="Bold" TextWrapping="Wrap" TextAlignment="Center" Margin="0,10,0,6"/>
+                                    <TextBlock x:Name="TideCardFlavour" FontFamily="Georgia" FontStyle="Italic" FontSize="13" Foreground="{StaticResource DimBrush}" TextWrapping="Wrap" TextAlignment="Center"/>
+                                    <Rectangle Height="1" Fill="#55C8553D" Margin="0,14,0,10"/>
+                                    <StackPanel x:Name="TideCardRows"/>
+                                    <TextBlock x:Name="TideCardPrompt" Text="▶  CLICK TO CONTINUE" FontSize="12" FontWeight="Bold" Foreground="{StaticResource WarmBrush}" HorizontalAlignment="Center" Margin="0,12,0,0"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Partial dice: discard 2 cards per 3-or-4 to make it a success -->
+                            <Border x:Name="RollChoiceOverlay" Visibility="Collapsed" Background="#B0060B0D">
+                                <Border HorizontalAlignment="Center" VerticalAlignment="Center" CornerRadius="14" Padding="20,14" MaxWidth="760"
+                                        Background="#F0201112" BorderBrush="#D23B30" BorderThickness="2">
+                                    <StackPanel>
+                                        <TextBlock Text="Partial successes" FontFamily="Georgia" FontSize="24" FontWeight="Bold"
+                                                   Foreground="#F0B0A8" HorizontalAlignment="Center"/>
+                                        <WrapPanel x:Name="RollChoiceDice" HorizontalAlignment="Center" Margin="0,10,0,2"/>
+                                        <TextBlock x:Name="RollChoiceSub" FontSize="13" Foreground="{StaticResource DimBrush}" TextWrapping="Wrap"
+                                                   TextAlignment="Center" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                                        <StackPanel x:Name="RollChoiceHand" Orientation="Horizontal" HorizontalAlignment="Center"/>
+                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,12,0,0">
+                                            <Button x:Name="RollChoiceConvert" Style="{StaticResource BigButton}" MinWidth="230" Margin="0,0,10,0" Click="RollChoiceConvert_Click"/>
+                                            <Button x:Name="RollChoiceKeep" Style="{StaticResource ActionButton}" HorizontalContentAlignment="Center" MinWidth="190" Click="RollChoiceKeep_Click"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+                            </Border>
+
+                            <!-- Choose your starting cards -->
+                            <Border x:Name="StartPickOverlay" Visibility="Collapsed" Background="#C8060B0D">
+                                <Border HorizontalAlignment="Center" VerticalAlignment="Center" CornerRadius="14" Padding="22,16"
+                                        Background="#F00F1E23" BorderBrush="{StaticResource WarmBrush}" BorderThickness="2">
+                                    <StackPanel>
+                                        <TextBlock Text="Choose your starting cards" FontFamily="Georgia" FontSize="26" FontWeight="Bold"
+                                                   Foreground="{StaticResource WarmBrush}" HorizontalAlignment="Center"/>
+                                        <TextBlock x:Name="StartPickSub" FontSize="13" Foreground="{StaticResource DimBrush}" HorizontalAlignment="Center" Margin="0,4,0,12"/>
+                                        <StackPanel x:Name="StartPickPanel" Orientation="Horizontal" HorizontalAlignment="Center"/>
+                                        <Button x:Name="StartPickConfirm" Style="{StaticResource BigButton}" Width="240" Margin="0,12,0,0"
+                                                HorizontalAlignment="Center" Click="StartPickConfirm_Click"/>
+                                    </StackPanel>
+                                </Border>
+                            </Border>
+                        </Grid>
+                    </Viewbox>
+                </Border>
+
+                <!-- Cards: always visible under the board -->
+                <Grid Grid.Row="2">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="5*"/>
+                        <ColumnDefinition Width="10"/>
+                        <ColumnDefinition Width="4*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0" Style="{StaticResource Panel}" Padding="10,6,4,6" Background="#132A2F">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top" Margin="0,0,0,5">
+                                <Run Text="MARKET" FontFamily="Georgia" FontWeight="Bold" FontSize="14" Foreground="{StaticResource WarmBrush}"/>
+                                <Run x:Name="MarketHint" Text="  buy with Time · FREE ones cost nothing · new cards each round" FontSize="11" Foreground="{StaticResource DimBrush}"/>
+                            </TextBlock>
+                            <Viewbox Stretch="Uniform" StretchDirection="DownOnly" HorizontalAlignment="Left" VerticalAlignment="Top">
+                                <StackPanel x:Name="MarketPanel" Orientation="Horizontal"/>
+                            </Viewbox>
+                        </DockPanel>
+                    </Border>
+
+                    <Border Grid.Column="2" Style="{StaticResource Panel}" Padding="10,6,4,6" Background="#1A2A22">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top" Margin="0,0,0,5">
+                                <Run x:Name="HandTitle" Text="YOUR HAND" FontFamily="Georgia" FontWeight="Bold" FontSize="14" Foreground="{StaticResource WarmBrush}"/>
+                                <Run Text="  play free · or discard for +1 Time" FontSize="11" Foreground="{StaticResource DimBrush}"/>
+                            </TextBlock>
+                            <Viewbox Stretch="Uniform" StretchDirection="DownOnly" HorizontalAlignment="Left" VerticalAlignment="Top">
+                                <StackPanel x:Name="HandPanel" Orientation="Horizontal"/>
+                            </Viewbox>
+                        </DockPanel>
+                    </Border>
+                </Grid>
+            </Grid>
+
+            <!-- Right: the killer -->
+            <Border Grid.Column="4" Style="{StaticResource Panel}" Padding="10,8,10,10">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <StackPanel Grid.Row="0">
+                            <!-- Tidewife -->
+                            <Border Background="#1E1A1A" CornerRadius="10" Padding="10" Margin="0" BorderBrush="#44C8553D" BorderThickness="1">
+                                <DockPanel>
+                                    <Border x:Name="TidewifePortraitHost" DockPanel.Dock="Left" Margin="0,0,12,0" VerticalAlignment="Top"/>
+                                    <StackPanel>
+                                        <TextBlock x:Name="KillerName" Text="Killer" FontFamily="Georgia" FontSize="16" FontWeight="Bold" Foreground="{StaticResource DangerBrush}"/>
+                                        <TextBlock x:Name="TidewifeWhere" Foreground="{StaticResource DimBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                                        <Grid Height="16">
+                                            <Border Background="#2A1A17" CornerRadius="4"/>
+                                            <Border x:Name="TidewifeBar" Background="{StaticResource DangerBrush}" CornerRadius="4" RenderTransformOrigin="0,0.5"/>
+                                            <TextBlock x:Name="TidewifeText" HorizontalAlignment="Center" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
+                                        </Grid>
+                                        <TextBlock x:Name="VillagerText" Foreground="{StaticResource DimBrush}" FontSize="11.5" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </DockPanel>
+                            </Border>
+                            <!-- Killer board: the Bloodlust track -->
+                            <Grid Margin="0,6,0,0">
+                                <Border Background="#1E1A1A" CornerRadius="10" Padding="10,8,10,8" BorderBrush="#44C8553D" BorderThickness="1">
+                                    <StackPanel>
+                                        <DockPanel>
+                                            <TextBlock x:Name="BloodlustText" DockPanel.Dock="Right" FontSize="12" FontWeight="Bold" Foreground="{StaticResource DangerBrush}"/>
+                                            <TextBlock Text="KILLER BOARD · BLOODLUST" FontWeight="Bold" FontSize="11" Foreground="{StaticResource DimBrush}"/>
+                                        </DockPanel>
+                                        <Grid x:Name="BloodlustGrid" Margin="0,5,0,4"/>
+                                        <TextBlock x:Name="KillerStatsText" FontSize="11.5" Foreground="{StaticResource DimBrush}" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Border>
+                                <Border x:Name="BloodlustGlow" CornerRadius="10" BorderBrush="{StaticResource DangerBrush}" BorderThickness="2" Opacity="0" IsHitTestVisible="False"/>
+                            </Grid>
+                    </StackPanel>
+
+                    <!-- Ongoing events: shrink to fit rather than scroll -->
+                    <Border Grid.Row="1" Background="#161E2A" CornerRadius="10" Padding="10,8,10,8" Margin="0,6,0,0" BorderBrush="#445B8FD6" BorderThickness="1">
+                        <DockPanel>
+                            <TextBlock x:Name="EventsHeader" DockPanel.Dock="Top" Text="EVENTS IN PLAY" FontWeight="Bold" FontSize="11" Foreground="{StaticResource DimBrush}" Margin="0,0,0,3"/>
+                            <Viewbox Stretch="Uniform" StretchDirection="DownOnly" MaxHeight="210" VerticalAlignment="Top" HorizontalAlignment="Left">
+                                <StackPanel x:Name="EventsList" Width="296"/>
+                            </Viewbox>
+                        </DockPanel>
+                    </Border>
+
+                    <!-- Last killer card -->
+                    <TextBlock Grid.Row="2" x:Name="TideTitle" Style="{StaticResource SideTitle}" Foreground="{StaticResource DangerBrush}"/>
+                    <TextBlock Grid.Row="3" x:Name="TideFlavour" FontFamily="Georgia" FontStyle="Italic" Foreground="{StaticResource DimBrush}" TextWrapping="Wrap" Margin="0,0,0,4"/>
+                    <Viewbox Grid.Row="4" Stretch="Uniform" StretchDirection="DownOnly" MaxHeight="120" VerticalAlignment="Top" HorizontalAlignment="Left">
+                        <StackPanel x:Name="TideLines" Width="318"/>
+                    </Viewbox>
+
+                    <!-- Journal: fills what's left; scroll it with the mouse wheel (no scroll bar) -->
+                    <DockPanel Grid.Row="5">
+                        <TextBlock DockPanel.Dock="Top" Text="Journal" Style="{StaticResource SideTitle}"/>
+                        <Border Background="#0E1C21" CornerRadius="8" Padding="8">
+                            <ScrollViewer x:Name="LogScroll" VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled">
+                                <StackPanel x:Name="LogPanel"/>
+                            </ScrollViewer>
+                        </Border>
+                    </DockPanel>
+                </Grid>
+            </Border>
+        </Grid>
+
+      </Grid>
+
+        <!-- Blocks input while animations play -->
+        <Border x:Name="InputBlocker" Background="Transparent" Visibility="Collapsed" MouseLeftButtonUp="Blocker_Click"/>
+
+        <!-- Game over -->
+        <Border x:Name="GameOverOverlay" Background="#D0060B0D" Visibility="Collapsed">
+            <Border Style="{StaticResource Panel}" Width="620" HorizontalAlignment="Center" VerticalAlignment="Center" Padding="28">
+                <StackPanel>
+                    <Border x:Name="GameOverPortrait" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                    <TextBlock x:Name="GameOverTitle" FontFamily="Georgia" FontSize="28" FontWeight="Bold" TextAlignment="Center" TextWrapping="Wrap"/>
+                    <TextBlock x:Name="GameOverText" FontFamily="Georgia" FontSize="15" TextAlignment="Center" TextWrapping="Wrap" Margin="0,14,0,8"/>
+                    <TextBlock x:Name="GameOverRating" FontSize="14" FontWeight="Bold" Foreground="{StaticResource WarmBrush}" TextAlignment="Center" Margin="0,0,0,18"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <Button Content="Play again" Style="{StaticResource BigButton}" Width="150" Margin="6,0" Click="PlayAgain_Click"/>
+                        <Button Content="Main menu" Style="{StaticResource ActionButton}" HorizontalContentAlignment="Center" Width="130" Margin="6,0" Click="GameOverMenu_Click"/>
+                        <Button Content="Look at the board" Style="{StaticResource ActionButton}" HorizontalContentAlignment="Center" Width="150" Margin="6,0" Click="HideOverlay_Click"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Border>
+        <!-- ============================================================ FRONT END -->
+        <Grid x:Name="MenuOverlay" Visibility="Collapsed">
+            <Grid.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                    <GradientStop Color="#F2060B0D" Offset="0"/>
+                    <GradientStop Color="#C8060B0D" Offset="0.45"/>
+                    <GradientStop Color="#70060B0D" Offset="1"/>
+                </LinearGradientBrush>
+            </Grid.Background>
+
+            <!-- Main menu -->
+            <Grid x:Name="MainMenuPanel" Margin="90,0,0,0">
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Left" Width="640">
+                    <TextBlock Text="SOLE SURVIVOR" FontFamily="Georgia" FontSize="62" FontWeight="Bold" Foreground="{StaticResource AccentBrush}">
+                        <TextBlock.Effect>
+                            <DropShadowEffect Color="#6CC3B0" BlurRadius="30" ShadowDepth="0" Opacity="0.55"/>
+                        </TextBlock.Effect>
+                    </TextBlock>
+                    <TextBlock Text="Three nights. Three horrors. Only one of you walks out." FontFamily="Georgia" FontStyle="Italic" FontSize="18"
+                               Foreground="{StaticResource DimBrush}" Margin="4,0,0,36"/>
+                    <Button x:Name="ContinueButton" Style="{StaticResource MenuButton}" Click="Continue_Click">
+                        <StackPanel>
+                            <TextBlock Text="Continue"/>
+                            <TextBlock x:Name="ContinueSub" FontFamily="Segoe UI" FontSize="12" FontWeight="Normal" Foreground="{StaticResource DimBrush}"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Content="New game" Style="{StaticResource MenuButton}" Click="MenuNewGame_Click"/>
+                    <Button Content="Options" Style="{StaticResource MenuButton}" Click="MenuOptions_Click"/>
+                    <Button Content="How to play" Style="{StaticResource MenuButton}" Click="Rules_Click"/>
+                    <Button Content="Quit" Style="{StaticResource MenuButton}" Click="Quit_Click"/>
+                    <TextBlock x:Name="VersionText" Foreground="#607676" FontSize="11" Margin="6,28,0,0"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- Scenario select -->
+            <Grid x:Name="ScenarioPanel" Visibility="Collapsed" Margin="60,40">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <StackPanel Grid.Row="0" HorizontalAlignment="Center" Margin="0,0,0,24">
+                    <TextBlock Text="CHOOSE YOUR NIGHT" FontFamily="Georgia" FontSize="34" FontWeight="Bold" Foreground="{StaticResource WarmBrush}" HorizontalAlignment="Center"/>
+                    <TextBlock Text="Each night has its own place, its own survivor and its own horror." FontFamily="Georgia" FontStyle="Italic" FontSize="15" Foreground="{StaticResource DimBrush}" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                </StackPanel>
+                <StackPanel Grid.Row="1" x:Name="ScenarioCards" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                <StackPanel Grid.Row="2" HorizontalAlignment="Center" Margin="0,24,0,0">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <TextBlock Text="Difficulty" Foreground="{StaticResource DimBrush}" FontSize="14" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                        <RadioButton x:Name="PickEasy" GroupName="PickDiff" Style="{StaticResource ModeToggle}" Width="110" Margin="0,0,6,0" Click="PickDifficulty_Click"><TextBlock Text="Easy" HorizontalAlignment="Center"/></RadioButton>
+                        <RadioButton x:Name="PickNormal" GroupName="PickDiff" Style="{StaticResource ModeToggle}" Width="110" Margin="0,0,6,0" Click="PickDifficulty_Click"><TextBlock Text="Normal" HorizontalAlignment="Center"/></RadioButton>
+                        <RadioButton x:Name="PickHard" GroupName="PickDiff" Style="{StaticResource ModeToggle}" Width="110" Click="PickDifficulty_Click"><TextBlock Text="Hard" HorizontalAlignment="Center"/></RadioButton>
+                    </StackPanel>
+                    <TextBlock x:Name="PickDifficultyText" Foreground="{StaticResource DimBrush}" FontSize="12" HorizontalAlignment="Center" Margin="0,6,0,14"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <Button Content="Back" Style="{StaticResource ActionButton}" HorizontalContentAlignment="Center" Width="140" Margin="0,0,12,0" Click="MenuBack_Click"/>
+                        <Button x:Name="BeginButton" Content="Begin the night" Style="{StaticResource BigButton}" Width="260" Click="Begin_Click"/>
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
+
+            <!-- Options -->
+            <Grid x:Name="OptionsPanel" Visibility="Collapsed">
+                <Border Style="{StaticResource Panel}" Width="560" HorizontalAlignment="Center" VerticalAlignment="Center" Padding="30,24">
+                    <StackPanel>
+                        <TextBlock Text="OPTIONS" FontFamily="Georgia" FontSize="30" FontWeight="Bold" Foreground="{StaticResource WarmBrush}" Margin="0,0,0,18"/>
+
+                        <TextBlock Text="Default difficulty" FontWeight="Bold"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,6,0,16">
+                            <RadioButton x:Name="OptEasy" GroupName="OptDiff" Style="{StaticResource ModeToggle}" Width="110" Margin="0,0,6,0" Click="Option_Changed"><TextBlock Text="Easy" HorizontalAlignment="Center"/></RadioButton>
+                            <RadioButton x:Name="OptNormal" GroupName="OptDiff" Style="{StaticResource ModeToggle}" Width="110" Margin="0,0,6,0" Click="Option_Changed"><TextBlock Text="Normal" HorizontalAlignment="Center"/></RadioButton>
+                            <RadioButton x:Name="OptHard" GroupName="OptDiff" Style="{StaticResource ModeToggle}" Width="110" Click="Option_Changed"><TextBlock Text="Hard" HorizontalAlignment="Center"/></RadioButton>
+                        </StackPanel>
+
+                        <TextBlock Text="Animation speed" FontWeight="Bold"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,6,0,16">
+                            <RadioButton x:Name="OptAnimNormal" GroupName="OptAnim" Style="{StaticResource ModeToggle}" Width="110" Margin="0,0,6,0" Click="Option_Changed"><TextBlock Text="Normal" HorizontalAlignment="Center"/></RadioButton>
+                            <RadioButton x:Name="OptAnimFast" GroupName="OptAnim" Style="{StaticResource ModeToggle}" Width="110" Click="Option_Changed"><TextBlock Text="Fast" HorizontalAlignment="Center"/></RadioButton>
+                        </StackPanel>
+
+                        <TextBlock Text="Sound" FontWeight="Bold"/>
+                        <CheckBox x:Name="OptMute" Foreground="{StaticResource TextBrush}" Margin="0,6,0,8" Click="Option_Changed"
+                                  Content="Mute all sound (M)"/>
+                        <DockPanel Margin="0,0,0,8">
+                            <TextBlock Text="Volume" Width="60" VerticalAlignment="Center" Foreground="{StaticResource DimBrush}"/>
+                            <TextBlock x:Name="OptVolumeText" DockPanel.Dock="Right" Width="44" TextAlignment="Right" VerticalAlignment="Center"/>
+                            <Slider x:Name="OptVolume" Minimum="0" Maximum="100" SmallChange="5" LargeChange="10" IsMoveToPointEnabled="True"
+                                    VerticalAlignment="Center" ValueChanged="Volume_Changed" PreviewMouseLeftButtonUp="Volume_Released"/>
+                        </DockPanel>
+                        <CheckBox x:Name="OptAmbientSound" Foreground="{StaticResource TextBrush}" Margin="0,0,0,16" Click="Option_Changed"
+                                  Content="Ambient sound (sea, wind, rain)"/>
+
+                        <TextBlock Text="Display" FontWeight="Bold" Margin="0,0,0,6"/>
+                        <CheckBox x:Name="OptAmbient" Foreground="{StaticResource TextBrush}" Margin="0,0,0,10" Click="Option_Changed"
+                                  Content="Weather and ambient effects (fog, snow, rain, lighthouse beam)"/>
+                        <CheckBox x:Name="OptHints" Foreground="{StaticResource TextBrush}" Margin="0,0,0,10" Click="Option_Changed"
+                                  Content="Show the hint beside the phase tracker"/>
+                        <CheckBox x:Name="OptFullscreen" Foreground="{StaticResource TextBrush}" Margin="0,0,0,10" Click="Option_Changed"
+                                  Content="Full screen (F11)"/>
+                        <TextBlock Text="Window size" Foreground="{StaticResource DimBrush}" Margin="0,0,0,6"/>
+                        <WrapPanel x:Name="OptSizes"/>
+                        <TextBlock x:Name="OptSizeNote" Foreground="{StaticResource DimBrush}" FontSize="11" Margin="0,0,0,16" TextWrapping="Wrap"/>
+
+                        <TextBlock x:Name="OptionsSaved" Foreground="{StaticResource DimBrush}" FontSize="11" Margin="0,0,0,12" TextWrapping="Wrap"/>
+                        <Button Content="Back" Style="{StaticResource BigButton}" Width="200" HorizontalAlignment="Left" Click="MenuBack_Click"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- Pause -->
+            <Grid x:Name="PausePanel" Visibility="Collapsed" Margin="90,0,0,0">
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Left" Width="460">
+                    <TextBlock Text="PAUSED" FontFamily="Georgia" FontSize="56" FontWeight="Bold" Foreground="{StaticResource WarmBrush}"/>
+                    <TextBlock x:Name="PauseSub" FontFamily="Georgia" FontStyle="Italic" FontSize="16" Foreground="{StaticResource DimBrush}" Margin="4,0,0,30" TextWrapping="Wrap"/>
+                    <Button Content="Resume" Style="{StaticResource MenuButton}" Click="Continue_Click"/>
+                    <Button Content="Restart this night" Style="{StaticResource MenuButton}" Click="Restart_Click"/>
+                    <Button Content="Options" Style="{StaticResource MenuButton}" Click="MenuOptions_Click"/>
+                    <Button Content="Main menu" Style="{StaticResource MenuButton}" Click="PauseMainMenu_Click"/>
+                    <Button Content="Quit to desktop" Style="{StaticResource MenuButton}" Click="Quit_Click"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- Confirm -->
+            <Grid x:Name="ConfirmPanel" Visibility="Collapsed" Background="#A0000000">
+                <Border Style="{StaticResource Panel}" Width="460" HorizontalAlignment="Center" VerticalAlignment="Center" Padding="28,22">
+                    <StackPanel>
+                        <TextBlock x:Name="ConfirmTitle" FontFamily="Georgia" FontSize="22" FontWeight="Bold" Foreground="{StaticResource WarmBrush}"/>
+                        <TextBlock x:Name="ConfirmText" TextWrapping="Wrap" Margin="0,8,0,20" Foreground="{StaticResource DimBrush}"/>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button Content="Cancel" Style="{StaticResource ActionButton}" HorizontalContentAlignment="Center" Width="120" Margin="0,0,10,0" Click="ConfirmNo_Click"/>
+                            <Button x:Name="ConfirmYes" Style="{StaticResource BigButton}" Width="160" Click="ConfirmYes_Click"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Grid>
+    </Grid>
+    </Viewbox>
+</Window>

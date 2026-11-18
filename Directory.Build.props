@@ -1,0 +1,11 @@
+<Project>
+  <PropertyGroup>
+    <Version>1.0.15</Version>
+    <Product>Sole Survivor</Product>
+    <Company>Ian</Company>
+    <Copyright>Copyright © 2026</Copyright>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+</Project>
