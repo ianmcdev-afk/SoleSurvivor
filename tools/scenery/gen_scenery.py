@@ -442,6 +442,183 @@ def stagnes():
         ("lamp_glass", "#E8C26A", None, 1, 0.9, "top"),
     ]
 
+
+# ====================================================================== Larkspur Lane
+def larkspur():
+    use_map('Larkspur')
+    # Front lawns: soft rectangles of mown grass.
+    for _ in range(4000):
+        if len(layers.get("lawn", [])) >= 16: break
+        x, y = rng.uniform(40, 760), rng.uniform(40, 540)
+        w, h = rng.uniform(40, 70), rng.uniform(22, 34)
+        if clear(x, y, 22) and clear(x - w/2, y, 8) and clear(x + w/2, y, 8):
+            add("lawn", f"M{f(x-w/2)},{f(y-h/2)} h{f(w)} v{f(h)} h{f(-w)} Z")
+    # Picket fences.
+    def fence(x, y):
+        w = rng.uniform(26, 44)
+        posts = " ".join(f"M{f(x-w/2+i*4)},{f(y)} v-6" for i in range(int(w // 4) + 1))
+        add("fence", f"M{f(x-w/2)},{f(y-3)} h{f(w)} " + posts)
+    scatter(12, 20, (30, 30, 770, 550), fence)
+    # Round garden trees.
+    def tree(x, y):
+        s = rng.uniform(0.8, 1.3)
+        add("tree_shadow", ellipse(x + 2, y + 2, 13 * s, 4 * s))
+        add("trunk", f"M{f(x-1.5)},{f(y)} v{f(-9*s)} h3 v{f(9*s)} Z")
+        add("canopy", ellipse(x, y - 14 * s, 11 * s, 10 * s))
+        add("canopy_light", ellipse(x - 3 * s, y - 17 * s, 5 * s, 4 * s))
+    scatter(26, 15, (24, 24, 776, 556), tree)
+    # Street lamps and mailboxes.
+    def lamp(x, y):
+        add("lamppost", f"M{f(x)},{f(y)} L{f(x)},{f(y-22)} q0,-3 5,-3")
+        add("lamp_glass", ellipse(x + 5, y - 24, 2.2, 1.6))
+        add("lamp_pool", ellipse(x + 4, y + 1, 14, 4))
+    scatter(8, 10, (30, 30, 770, 550), lamp)
+    def mailbox(x, y):
+        add("mailbox", f"M{f(x)},{f(y)} v-7 M{f(x-3)},{f(y-7)} h6 v-4 q-3,-2 -6,0 Z")
+        add("mailflag", f"M{f(x+3)},{f(y-10)} v-3 h2 v1.5 h-2")
+    scatter(8, 7, (30, 30, 770, 550), mailbox)
+    # Parked cars.
+    def car(x, y):
+        c = rng.choice(["car_red", "car_blue", "car_cream"])
+        add(c, f"M{f(x-12)},{f(y)} v-5 l4,-4 h14 l4,4 h2 v5 Z")
+        add("car_glass", f"M{f(x-7)},{f(y-6)} l2.5,-2.5 h4.5 v2.5 Z M{f(x+1)},{f(y-6)} v-2.5 h4 l2.5,2.5 Z")
+        add("wheels", ellipse(x - 7, y, 2.4, 2.4) + " " + ellipse(x + 7, y, 2.4, 2.4))
+    scatter(5, 16, (40, 40, 760, 540), car)
+    return layers, [
+        ("lawn", "#2E2A4A", None, 1, 0.8, "ground"),
+        ("lamp_pool", "#E8C26A", None, 1, 0.12, "ground"),
+        ("tree_shadow", "#000000", None, 1, 0.3, "top"),
+        ("trunk", "#3A2A28", None, 1, 1, "top"),
+        ("canopy", "#2E3A4A", "#1E2836", 0.8, 1, "top"),
+        ("canopy_light", "#3E4E62", None, 1, 0.8, "top"),
+        ("fence", "none", "#D8D4E4", 1.2, 0.85, "top"),
+        ("lamppost", "none", "#2A2A30", 1.6, 1, "top"),
+        ("lamp_glass", "#FFE08A", None, 1, 0.95, "top"),
+        ("mailbox", "#5A6A8A", "#2A2A3A", 0.8, 1, "top"),
+        ("mailflag", "#C8553D", None, 1, 1, "top"),
+        ("car_red", "#8A3A3A", "#3A1A1A", 0.6, 1, "top"),
+        ("car_blue", "#3A5A8A", "#1A2A3A", 0.6, 1, "top"),
+        ("car_cream", "#C8BCA0", "#5A5440", 0.6, 1, "top"),
+        ("car_glass", "#9AB0C8", None, 1, 0.9, "top"),
+        ("wheels", "#141414", None, 1, 1, "top"),
+    ]
+
+# ====================================================================== Kestrel Motel
+def kestrel():
+    use_map('Kestrel')
+    # Sand drifts.
+    for _ in range(3000):
+        if len(layers.get("drift", [])) >= 20: break
+        x, y = rng.uniform(40, 760), rng.uniform(40, 540)
+        if clear(x, y, 16): blob(x, y, rng.uniform(20, 42), rng.uniform(6, 12), "drift")
+    # Saguaro cacti.
+    def cactus(x, y):
+        s = rng.uniform(0.8, 1.3)
+        add("cactus_shadow", ellipse(x + 3, y + 1, 8 * s, 2.4 * s))
+        add("cactus", f"M{f(x-2*s)},{f(y)} v{f(-22*s)} q{f(2*s)},{f(-3*s)} {f(4*s)},0 v{f(22*s)} Z "
+                      f"M{f(x-2*s)},{f(y-10*s)} h{f(-5*s)} v{f(-7*s)} q{f(1.5*s)},{f(-2*s)} {f(3*s)},0 v{f(4*s)} h{f(2*s)} Z "
+                      f"M{f(x+2*s)},{f(y-13*s)} h{f(5*s)} v{f(-6*s)} q{f(-1.5*s)},{f(-2*s)} {f(-3*s)},0 v{f(3*s)} h{f(-2*s)} Z")
+    scatter(18, 12, (24, 24, 776, 556), cactus)
+    # Scrub and tumbleweeds.
+    def scrub(x, y):
+        add("scrub", f"M{f(x)},{f(y)} l-5,-5 M{f(x)},{f(y)} l-1,-7 M{f(x)},{f(y)} l4,-6 M{f(x)},{f(y)} l7,-3")
+    scatter(40, 6, (20, 20, 780, 560), scrub)
+    def tumbleweed(x, y):
+        r = rng.uniform(4, 6.5)
+        add("tumbleweed", ellipse(x, y - r, r, r * 0.9) + f" M{f(x-r)},{f(y-r)} q{f(r)},{f(-r)} {f(2*r)},0 M{f(x-r*0.6)},{f(y-r*1.6)} l{f(r*1.2)},{f(r*1.2)}")
+    scatter(8, 8, (20, 20, 780, 560), tumbleweed)
+    # Rocks.
+    def rock(x, y):
+        w = rng.uniform(6, 12)
+        add("rock", f"M{f(x-w)},{f(y)} q{f(w*0.2)},{f(-w*0.9)} {f(w)},{f(-w*0.8)} q{f(w*0.8)},{f(w*0.1)} {f(w)},{f(w*0.8)} Z")
+    scatter(14, 9, (20, 20, 780, 560), rock)
+    # Telephone poles with sagging wires, across the top of the map.
+    poles = [(x, rng.uniform(26, 40)) for x in range(30, 800, 70)]
+    poles = [(x, y) for x, y in poles if clear(x, y, 6)]
+    for x, y in poles:
+        add("pole", f"M{f(x)},{f(y)} v-26 M{f(x-6)},{f(y-23)} h12")
+    for (x1, y1), (x2, y2) in zip(poles, poles[1:]):
+        if x2 - x1 < 160:
+            add("wires", f"M{f(x1-6)},{f(y1-23)} Q{f((x1+x2)/2)},{f((y1+y2)/2-14)} {f(x2-6)},{f(y2-23)} M{f(x1+6)},{f(y1-23)} Q{f((x1+x2)/2)},{f((y1+y2)/2-12)} {f(x2+6)},{f(y2-23)}")
+    # Oil drums.
+    def drum(x, y):
+        add("drum", f"M{f(x-3)},{f(y)} v-8 h6 v8 Z")
+        add("drum_band", f"M{f(x-3)},{f(y-3)} h6 M{f(x-3)},{f(y-6)} h6")
+    scatter(6, 6, (30, 30, 770, 550), drum)
+    return layers, [
+        ("drift", "#4A3E2C", None, 1, 0.7, "ground"),
+        ("rock", "#5A4E3E", "#2E281E", 0.6, 1, "top"),
+        ("scrub", "none", "#5A5A34", 1, 0.9, "top"),
+        ("tumbleweed", "none", "#8A7048", 0.9, 0.9, "top"),
+        ("cactus_shadow", "#000000", None, 1, 0.3, "top"),
+        ("cactus", "#3A5A34", "#1E3A1C", 0.8, 1, "top"),
+        ("drum", "#6A3A2A", "#2A1A14", 0.6, 1, "top"),
+        ("drum_band", "none", "#3A2018", 0.8, 1, "top"),
+        ("wires", "none", "#1A1A1A", 0.6, 0.8, "top"),
+        ("pole", "none", "#3A2A1E", 1.8, 1, "top"),
+    ]
+
+# ====================================================================== Ashgrove House
+def ashgrove():
+    use_map('Ashgrove', wall=12)
+    # Outer walls, with the front door gap at the foyer.
+    gx = LOCS[0][0]
+    add("wall", f"M{gx-60},{H-8} L8,{H-8} L8,8 L792,8 L792,{H-8} L{gx+60},{H-8}")
+    # Interior walls along a rough floor plan; doorways open where the corridors cross.
+    for x in [275, 525]:
+        y = 20.0
+        while y < H - 20:
+            if clear(x, y, 3): add("wall_in", f"M{x},{f(y)} v6")
+            y += 6
+    for y in [225, 410]:
+        x = 20.0
+        while x < W - 20:
+            if clear(x, y, 3): add("wall_in", f"M{f(x)},{y} h6")
+            x += 6
+    # A rug under each room.
+    for i, (lx, ly) in LOCS.items():
+        add("rug", f"M{f(lx-100)},{f(ly-60)} h200 v140 h-200 Z")
+        add("rug_trim", f"M{f(lx-94)},{f(ly-54)} h188 v128 h-188 Z")
+    # Furniture.
+    def armchair(x, y):
+        add("chair", f"M{f(x-7)},{f(y)} v-6 q0,-6 7,-6 q7,0 7,6 v6 Z")
+        add("chair_seat", f"M{f(x-5)},{f(y-1)} v-4 h10 v4 Z")
+    def side_table(x, y):
+        add("table", ellipse(x, y - 4, 6, 3) + f" M{f(x)},{f(y-4)} v4")
+        add("candle_glow", ellipse(x, y - 10, 7, 7))
+        add("candle", f"M{f(x-0.8)},{f(y-7)} h1.6 v-4 h-1.6 Z")
+    def clock(x, y):
+        add("clock", f"M{f(x-4)},{f(y)} v-26 q4,-4 8,0 v26 Z")
+        add("clock_face", ellipse(x, y - 21, 2.6, 2.6))
+    def fern(x, y):
+        add("pot", f"M{f(x-4)},{f(y)} l-1,-6 h10 l-1,6 Z")
+        add("fern", f"M{f(x)},{f(y-6)} q-8,-4 -9,-10 M{f(x)},{f(y-6)} q8,-4 9,-10 M{f(x)},{f(y-6)} q-2,-8 0,-14 M{f(x)},{f(y-6)} q4,-6 4,-12")
+    def chest(x, y):
+        add("chest", f"M{f(x-7)},{f(y)} v-7 q7,-4 14,0 v7 Z")
+        add("chest_band", f"M{f(x-7)},{f(y-4)} h14")
+    scatter(10, 9, (30, 30, 770, 550), armchair)
+    scatter(9, 8, (30, 30, 770, 550), side_table)
+    scatter(5, 9, (30, 30, 770, 550), clock)
+    scatter(8, 9, (30, 30, 770, 550), fern)
+    scatter(4, 9, (30, 30, 770, 550), chest)
+    return layers, [
+        ("rug", "#3A1418", None, 1, 0.35, "ground"),
+        ("rug_trim", "none", "#C9A04A", 1, 0.25, "ground"),
+        ("candle_glow", "#FFC870", None, 1, 0.18, "ground"),
+        ("wall_in", "none", "#14090A", 5, 0.9, "top"),
+        ("wall", "none", "#14090A", 8, 1, "top"),
+        ("chair", "#5A1E24", "#2A0E12", 0.6, 1, "top"),
+        ("chair_seat", "#7A2E34", None, 1, 1, "top"),
+        ("table", "#4A2A18", "#2A1408", 0.8, 1, "top"),
+        ("candle", "#F4F0E8", None, 1, 1, "top"),
+        ("clock", "#4A2A18", "#1E0E06", 0.8, 1, "top"),
+        ("clock_face", "#E8E0C8", "#1E0E06", 0.5, 1, "top"),
+        ("pot", "#7A4A2A", None, 1, 1, "top"),
+        ("fern", "none", "#3A5A30", 1.2, 1, "top"),
+        ("chest", "#5A3A20", "#2A1A0A", 0.8, 1, "top"),
+        ("chest_band", "none", "#C9A04A", 1, 1, "top"),
+    ]
+
 # ====================================================================== write C#
 def emit(name, result):
     lay, order = result
@@ -462,6 +639,9 @@ results = {"Gallowmouth": gallowmouth()}
 sc = CONSTS['StoneCircle']
 results["Whitepine"] = whitepine()
 results["StAgnes"] = stagnes()
+results["Larkspur"] = larkspur()
+results["Kestrel"] = kestrel()
+results["Ashgrove"] = ashgrove()
 puddles = CONSTS.get('Puddles', [])
 
 cs = ["// <auto-generated> by tools/scenery/gen_scenery.py. Edit the generator, not this file. </auto-generated>",
@@ -474,7 +654,7 @@ cs = ["// <auto-generated> by tools/scenery/gen_scenery.py. Edit the generator, 
       "    /// <summary>St Agnes puddle centres, for rain glints.</summary>",
       "    public static readonly (double X, double Y)[] Puddles = [" + ", ".join(f"({x}, {y})" for x, y in puddles) + "];", "",
       "    public static Layer[] For(string scenarioId) => scenarioId switch",
-      "    {", '        "whitepine" => Whitepine,', '        "stagnes" => StAgnes,', "        _ => Gallowmouth", "    };", ""]
+      "    {", '        "whitepine" => Whitepine,', '        "stagnes" => StAgnes,', '        "larkspur" => Larkspur,', '        "kestrel" => Kestrel,', '        "ashgrove" => Ashgrove,', "        _ => Gallowmouth", "    };", ""]
 previews = {}
 for name, res in results.items():
     lines, prev = emit(name, res)

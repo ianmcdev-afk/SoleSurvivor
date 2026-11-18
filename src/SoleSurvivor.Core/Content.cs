@@ -16,7 +16,9 @@ public enum ItemKind
     FlareGun,      // use: 2 wounds, here or adjacent
     Bandages,      // use: heal 2
     BlessedSalt,   // use: 1 wound + she can't strike next round
-    IronNails      // use: barricade
+    IronNails,     // use: barricade
+    Key,           // opens one locked door (used up when you walk through it)
+    Vehicle        // walk or escort several spaces in one move (scenarios with VehicleRange)
 }
 
 public sealed record ItemDef(ItemKind Kind, string Name, string Text, bool Consumable, int FightBonus = 0, int SearchBonus = 0);
@@ -55,8 +57,9 @@ public static class Board
     public static bool AreAdjacent(int a, int b) => Scenarios.Current.Adjacency[a].Contains(b);
 
     /// <summary>Shortest path from <paramref name="from"/> to <paramref name="to"/>, excluding <paramref name="from"/>.
-    /// Returns null if unreachable. <paramref name="blocked"/> may not be entered.</summary>
-    public static List<int>? Path(int from, int to, int? blocked = null)
+    /// Returns null if unreachable. <paramref name="blocked"/> may not be entered; <paramref name="canPass"/>, if given,
+    /// says whether an edge can be crossed (locked doors).</summary>
+    public static List<int>? Path(int from, int to, int? blocked = null, Func<int, int, bool>? canPass = null)
     {
         if (from == to) return new List<int>();
         if (blocked == to) return null;
@@ -71,7 +74,7 @@ public static class Board
             int cur = queue.Dequeue();
             foreach (int n in Neighbours(cur))
             {
-                if (seen[n] || n == blocked) continue;
+                if (seen[n] || n == blocked || (canPass is not null && !canPass(cur, n))) continue;
                 seen[n] = true;
                 prev[n] = cur;
                 if (n == to)
@@ -87,7 +90,8 @@ public static class Board
         return null;
     }
 
-    public static int Distance(int from, int to, int? blocked = null) => Path(from, to, blocked)?.Count ?? int.MaxValue;
+    public static int Distance(int from, int to, int? blocked = null, Func<int, int, bool>? canPass = null) =>
+        Path(from, to, blocked, canPass)?.Count ?? int.MaxValue;
 }
 
 // ---------------------------------------------------------------------------

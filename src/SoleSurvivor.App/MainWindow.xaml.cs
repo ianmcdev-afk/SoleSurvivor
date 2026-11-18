@@ -15,11 +15,11 @@ public partial class MainWindow : Window
 
     /// <summary>What the board looked like before an action, so we can animate the difference.</summary>
     private sealed record Snapshot(int Survivor, int Tidewife, int[] Villagers, int Health, int TidewifeHealth, int Saved, DiceRoll? Roll,
-        int Time, int HandCount, int MarketCount, int InventoryCount, int HorrorDice)
+        int Time, int HandCount, int MarketCount, int InventoryCount, int HorrorDice, int Locked)
     {
         public Snapshot(Game g)
             : this(g.SurvivorLocation, g.TidewifeLocation, g.Villagers.ToArray(), g.Health, g.TidewifeHealth, g.VillagersSaved, g.LastRoll,
-                   g.Time, g.Hand.Count, g.Market.Count, g.Inventory.Count, g.HorrorDice) { }
+                   g.Time, g.Hand.Count, g.Market.Count, g.Inventory.Count, g.HorrorDice, g.LockedDoors.Count()) { }
     }
 
     private static bool _clickSoundRegistered;
@@ -82,7 +82,8 @@ public partial class MainWindow : Window
         ResetFigures();
         _stage = Stage.YourTurn;
         _startPicks.Clear();
-        Render();   // shows the starting-card picker; the ROUND 1 banner follows the pick
+        Render();
+        ShowBriefing(); // the objective first; the starting-card picker and ROUND 1 banner follow
     }
 
     // ================================================================ input
@@ -181,6 +182,16 @@ public partial class MainWindow : Window
         {
             e.Handled = true;
             ToggleMute();
+            return;
+        }
+        if (BriefingOpen)
+        {
+            // Esc, Enter or Space close the objective panel; nothing else happens underneath it.
+            if (e.Key is Key.Escape or Key.Enter or Key.Space)
+            {
+                e.Handled = true;
+                HideBriefing();
+            }
             return;
         }
         if (e.Key == Key.Escape)

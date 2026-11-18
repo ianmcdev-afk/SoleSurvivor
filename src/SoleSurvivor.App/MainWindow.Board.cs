@@ -86,6 +86,12 @@ public partial class MainWindow
         {
             Art.AddAurora(AmbientLayer, w);
         }
+        else if (id == "kestrel")
+        {
+            // The broadcast tower's warning light blinks on and off.
+            var tower = Board.Locations[6];
+            Art.AddBlink(AmbientLayer, tower.X - 2, tower.Y - 60, Art.C("#FF3A3A"), 1.4);
+        }
 
         foreach (var loc in Board.Locations)
         {
@@ -100,6 +106,7 @@ public partial class MainWindow
             "gallowmouth" => (7, 72, 2),
             "whitepine" => (0, 57, 10),
             "stagnes" => (6, 67, -2),
+            "larkspur" => (5, 57, 14),
             _ => null
         };
         if (chimney is { } c)
@@ -108,10 +115,13 @@ public partial class MainWindow
             Art.AddChimneySmoke(IconLayer, at.X - 42 + c.dx, at.Y - 46 + c.dy);
         }
 
-        Art.AddFog(FogLayer, w, h);
+        if (!_theme.Indoor) Art.AddFog(FogLayer, w, h);
         _weatherLayer = new Canvas { IsHitTestVisible = false };
         if (_theme.Weather == Weather.Snow) Art.AddSnow(_weatherLayer, w, h);
         if (_theme.Weather == Weather.Rain) Art.AddRain(_weatherLayer, w, h);
+        if (_theme.Weather == Weather.Motes) Art.AddMotes(_weatherLayer, w, h);
+        if (_theme.Weather == Weather.Static) Art.AddStatic(_weatherLayer, w, h);
+        if (_theme.Weather == Weather.Embers) Art.AddEmbers(_weatherLayer, w, h);
         FogLayer.Children.Add(_weatherLayer);
         Art.AddVignette(FogLayer, w, h);
         ApplyAmbientSetting();
@@ -176,24 +186,42 @@ public partial class MainWindow
         InfoLayer.Children.Clear();
         _villagerFigures.Clear();
 
-        // Animated "marching" route to every place you can go right now.
-        foreach (int n in Board.Neighbours(_game.SurvivorLocation))
+        // Animated "marching" route to every place you can go right now: one step on foot,
+        // further along the roads with a vehicle (drawn in the accent colour).
+        for (int n = 0; n < Board.Count; n++)
         {
             if (!IsReachable(n)) continue;
-            var a = Spot(_game.SurvivorLocation);
-            var b = Spot(n);
-            var line = new Line
+            var route = _game.RouteTo(n);
+            if (route is null) continue;
+            var points = new PointCollection { Spot(_game.SurvivorLocation) };
+            foreach (int stop in route) points.Add(Spot(stop));
+            var line = new System.Windows.Shapes.Polyline
             {
-                X1 = a.X, Y1 = a.Y, X2 = b.X, Y2 = b.Y,
-                Stroke = Art.Warm,
+                Points = points,
+                Stroke = route.Count > 1 ? Art.Accent : Art.Warm,
                 StrokeThickness = 3,
                 StrokeDashArray = new DoubleCollection { 1.5, 2 },
                 StrokeDashCap = PenLineCap.Round,
-                Opacity = 0.9
+                StrokeLineJoin = PenLineJoin.Round,
+                Opacity = route.Count > 1 ? 0.75 : 0.9
             };
             line.BeginAnimation(System.Windows.Shapes.Shape.StrokeDashOffsetProperty,
                 new DoubleAnimation(0, -7, new Duration(TimeSpan.FromMilliseconds(700))) { RepeatBehavior = RepeatBehavior.Forever });
             RouteLayer.Children.Add(line);
+        }
+
+        // Locked doors: a padlock on the road. Opened doors keep a faint open padlock.
+        foreach (var (a, b) in _game.Scenario.LockedEdges)
+        {
+            var mid = Spot(a) + (Spot(b) - Spot(a)) / 2;
+            bool locked = _game.IsLocked(a, b);
+            var lockIcon = Art.Padlock(locked);
+            lockIcon.ToolTip = locked
+                ? $"Locked door between the {Board.Locations[a].Name} and the {Board.Locations[b].Name}.\nNobody gets through, {_game.Scenario.Killer.NameLower} included.\nWalk through carrying a {_game.Scenario.KeyName} to open it for good."
+                : "An unlocked door. It's open for everyone now.";
+            Canvas.SetLeft(lockIcon, mid.X - 12);
+            Canvas.SetTop(lockIcon, mid.Y - 12);
+            InfoLayer.Children.Add(lockIcon);
         }
 
         foreach (var loc in Board.Locations)
@@ -330,10 +358,13 @@ public partial class MainWindow
         }
 
         // Click target covering the building, plaque and villagers.
+        var routeHere = reachable ? _game.RouteTo(id) : null;
+        string how = routeHere is { Count: > 1 } ? $"{_game.Scenario.VehicleVerb} the {_game.Scenario.VehicleName?.ToLowerInvariant()}" : "walk";
+        string unlocking = routeHere is { Count: 1 } && _game.IsLocked(_game.SurvivorLocation, id) ? $" (uses a {_game.Scenario.KeyName} to unlock the door)" : "";
         string action = !reachable ? ""
             : EscortMode.IsChecked == true && _game.CanEscort(id)
-                ? $"\n\nClick: escort up to {_game.EscortCapacity} {_game.Scenario.Victims} here."
-                : "\n\nClick: walk here.";
+                ? $"\n\nClick: {(routeHere is { Count: > 1 } ? how + " with" : "escort")} up to {_game.EscortCapacity} {_game.Scenario.Victims} here{unlocking}."
+                : $"\n\nClick: {how} here{unlocking}.";
         var hit = new Border
         {
             Width = 130, Height = 124,
@@ -384,7 +415,7 @@ public partial class MainWindow
         if (f.LegRight is not null) Anim.Loop(f.LegRight, RotateTransform.AngleProperty, 24, -24, stepMs);
     }
 
-    private async Task WalkWrenAsync(int from, int to, int followers)
+    private async Task WalkWrenAsync(int from, int to, int followers, double pace = 1.0)
     {
         var start = WrenFeet(from);
         var end = WrenFeet(to);
@@ -392,9 +423,9 @@ public partial class MainWindow
         Face(_wren, start.X, end.X);
 
         double distance = (end - start).Length;
-        double ms = Math.Clamp(distance * 3.4, 420, 1000);
-        StartWalkCycle(_wren, 300);
-        _ = Sound.StepsAsync(ms * Anim.Speed, followers > 0 ? 4 : 3);
+        double ms = Math.Clamp(distance * 3.4, 420, 1000) * pace;
+        StartWalkCycle(_wren, pace < 1 ? 160 : 300);
+        if (pace >= 1) _ = Sound.StepsAsync(ms * Anim.Speed, followers > 0 ? 4 : 3);
 
         var tasks = new List<Task>
         {
@@ -641,7 +672,8 @@ public partial class MainWindow
             if (g.LastRoll!.Converted > 0)
             {
                 Sound.Play("card_discard");
-                Float(FeetOf(_wren) + new Vector(0, -60), $"+{g.LastRoll.Converted} ★ for {g.LastRoll.Converted * Game.CardsPerConversion} cards", Art.Warm, 16);
+                int spent = g.LastRoll.ConvertedDice!.Sum(i => DiceRoll.CardsFor(g.LastRoll.Values[i]));
+                Float(FeetOf(_wren) + new Vector(0, -60), $"+{g.LastRoll.Converted} ★ for {spent} card{(spent == 1 ? "" : "s")}", Art.Warm, 16);
                 await Anim.Wait(450);
             }
         }
@@ -660,7 +692,19 @@ public partial class MainWindow
             int from = before.Survivor;
             int followers = Math.Max(0, before.Villagers[from] - g.Villagers[from]);
             HideVillagerFigures(from, followers);
-            await WalkWrenAsync(from, g.SurvivorLocation, followers);
+            if (g.LockedDoors.Count() < before.Locked)
+            {
+                Sound.Play("unlock");
+                Float(FeetOf(_wren) + new Vector(0, -64), $"Unlocked with the {g.Scenario.KeyName}", Art.Warm, 15);
+                await Anim.Wait(350);
+            }
+            // Follow the route stop by stop; a vehicle trip is quicker per leg and makes its own noise.
+            IReadOnlyList<int> route = g.LastRoute.Count >= 2 && g.LastRoute[0] == from && g.LastRoute[^1] == g.SurvivorLocation
+                ? g.LastRoute : new[] { from, g.SurvivorLocation };
+            bool driving = route.Count > 2;
+            if (driving) Sound.Play(g.Scenario.VehicleSound, 0.85);
+            for (int i = 0; i + 1 < route.Count; i++)
+                await WalkWrenAsync(route[i], route[i + 1], followers, driving ? 0.55 : 1.0);
         }
         else
         {

@@ -3,7 +3,7 @@ using SoleSurvivor.Core;
 // Headless harness: plays many games with a heuristic player and a random-legal-move fuzzer,
 // checks invariants, and prints balance numbers. Usage: SoleSurvivor.Sim [games]
 
-if (args.Length > 1 && args[0] == "dump") { Dump.One(int.Parse(args[1]), PlayHeuristicTurn); return; }
+if (args.Length > 1 && args[0] == "dump") { Dump.One(int.Parse(args[1]), PlayHeuristicTurn, args.Length > 2 ? args[2] : null); return; }
 int games = args.Length > 0 ? int.Parse(args[0]) : 2000;
 
 var only = args.Length > 1 ? args[1] : null;
@@ -36,8 +36,11 @@ static void Run(string name, int games, Action<Game, Random> playTurn, Difficult
                 if (g.Pending is not null)
                 {
                     if (g.CanEndTurn || g.CanSearch) throw new Exception("actions allowed while a roll is pending");
-                    if (g.ConvertPartials(new[] { 0 })) throw new Exception("odd card count accepted");
-                    g.ConvertPartials(Array.Empty<int>());
+                    if (g.ConvertPartials(Array.Empty<int>(), new[] { 0 })) throw new Exception("cards without dice accepted");
+                    var p0 = g.Pending;
+                    int two = Enumerable.Range(0, p0.Roll.Values.Count).FirstOrDefault(i => p0.Roll.Values[i] == 3, -1);
+                    if (two >= 0 && g.Hand.Count >= 1 && g.ConvertPartials(new[] { two }, new[] { 0 })) throw new Exception("a 3 converted with one card");
+                    g.ConvertPartials(Array.Empty<int>(), Array.Empty<int>());
                 }
                 Check(g);
                 if (!g.IsOver)
@@ -50,6 +53,7 @@ static void Run(string name, int games, Action<Game, Random> playTurn, Difficult
                         if (ev.Kind is not (TideEventKind.Moved or TideEventKind.Rose)) continue;
                         if (ev.From != her) throw new Exception($"event chain broken: {ev.Kind} from {ev.From}, expected {her}");
                         if (ev.Kind == TideEventKind.Moved && !Board.AreAdjacent(ev.From, ev.To)) throw new Exception("non-adjacent step");
+                        if (ev.Kind == TideEventKind.Moved && g.IsLocked(ev.From, ev.To)) throw new Exception("killer walked through a locked door");
                         her = ev.To;
                     }
                     if (her != g.TidewifeLocation) throw new Exception("events don't end where she is");
@@ -77,6 +81,9 @@ static void Check(Game g)
     if (g.Hope < 0) throw new Exception("hope");
     if (g.Dread < 0 || g.Dread > Game.MaxDread) throw new Exception("dread");
     if (g.SpecialVictimAt >= 0 && g.Villagers[g.SpecialVictimAt] == 0) throw new Exception("special victim on an empty location");
+    for (int i = 0; i < g.Inventory.Count; i++)
+        if (Items.All[g.Inventory[i]].Consumable && g.CanUse(i) != (g.UseBlockedReason(i) is null))
+            throw new Exception($"use reason disagrees with CanUse for {g.Inventory[i]}");
     if (g.ActiveEvents.Any(e => e.RoundsLeft < 0)) throw new Exception("event timer");
     if (g.TidewifeHealth < 0) throw new Exception("tidewife hp");
     if (g.Villagers.Any(v => v < 0)) throw new Exception("villagers");
@@ -92,9 +99,16 @@ static void PlayRandomTurn(Game g, Random r)
     {
         if (g.Pending is { } p)
         {
-            int n = r.Next(p.MaxConversions + 1) * Game.CardsPerConversion;
-            var picks = Enumerable.Range(0, g.Hand.Count).OrderBy(_ => r.Next()).Take(n).ToList();
-            if (!g.ConvertPartials(picks)) throw new Exception("conversion refused");
+            var dice = Enumerable.Range(0, p.Roll.Values.Count).Where(i => DiceRoll.CardsFor(p.Roll.Values[i]) > 0).OrderBy(_ => r.Next()).ToList();
+            var chosen = new List<int>(); int need = 0;
+            foreach (int d in dice)
+            {
+                int c = DiceRoll.CardsFor(p.Roll.Values[d]);
+                if (chosen.Count >= p.MaxConversions || need + c > g.Hand.Count || r.Next(2) == 0) continue;
+                chosen.Add(d); need += c;
+            }
+            var picks = Enumerable.Range(0, g.Hand.Count).OrderBy(_ => r.Next()).Take(need).ToList();
+            if (!g.ConvertPartials(chosen, picks)) throw new Exception("conversion refused");
             continue;
         }
         var options = new List<Func<bool>>();
@@ -147,8 +161,18 @@ static bool Step(Game g)
     if (g.Pending is { } p)
     {
         int want = p.Purpose == "fight" ? p.MaxConversions : (p.Roll.Successes == 0 ? 1 : 0);
-        var cheapest = Enumerable.Range(0, g.Hand.Count).OrderBy(i => g.Hand[i].Cost).Take(want * Game.CardsPerConversion).ToList();
-        if (!g.ConvertPartials(cheapest)) throw new Exception("conversion refused");
+        // Cheapest dice first (the one-card 4s), paid with the cheapest cards.
+        var dice = Enumerable.Range(0, p.Roll.Values.Count).Where(i => DiceRoll.CardsFor(p.Roll.Values[i]) > 0)
+            .OrderBy(i => DiceRoll.CardsFor(p.Roll.Values[i])).ToList();
+        var chosen = new List<int>(); int need = 0;
+        foreach (int d in dice)
+        {
+            int c = DiceRoll.CardsFor(p.Roll.Values[d]);
+            if (chosen.Count >= want || need + c > g.Hand.Count) break;
+            chosen.Add(d); need += c;
+        }
+        var cheapest = Enumerable.Range(0, g.Hand.Count).OrderBy(i => g.Hand[i].Cost).Take(need).ToList();
+        if (!g.ConvertPartials(chosen, cheapest)) throw new Exception("conversion refused");
         return true;
     }
 
@@ -202,11 +226,20 @@ static bool Step(Game g)
         }
     }
 
+    // Paths respect locked doors (passable if we carry a key); with a vehicle, go as far along as one move allows.
+    List<int>? PathTo(int to) => Board.Path(g.SurvivorLocation, to, null, (a, b) => !g.IsLocked(a, b) || g.Keys > 0);
+    int Furthest(List<int> path, Func<int, bool> can)
+    {
+        for (int i = path.Count - 1; i >= 0; i--) if (can(path[i])) return path[i];
+        return -1;
+    }
+
     // Escort villagers home.
     if (!g.InFinale && g.Villagers[g.SurvivorLocation] > 0)
     {
-        var path = Board.Path(g.SurvivorLocation, Board.Sanctuary);
-        if (path is { Count: > 0 } && g.CanEscort(path[0])) return g.Escort(path[0]);
+        var path = PathTo(Board.Sanctuary);
+        int to = path is { Count: > 0 } ? Furthest(path, g.CanEscort) : -1;
+        if (to >= 0) return g.Escort(to);
     }
 
     if (g.FightBonus < 2 && g.CanSearch && (g.VillagersRemaining == 0 || g.Time >= 4)) return g.Search();
@@ -221,27 +254,29 @@ static bool Step(Game g)
         for (int i = 0; i < Board.Count; i++)
         {
             if (g.Villagers[i] == 0 && (g.StashCount(i) == 0 || g.FightBonus >= 2)) continue;
-            int d = Board.Distance(g.SurvivorLocation, i) * 2 - g.Villagers[i];
+            int d = (PathTo(i)?.Count ?? 99) * 2 - g.Villagers[i];
             if (d < best) { best = d; target = i; }
         }
         if (target < 0) target = g.TidewifeLocation;
     }
-    var step = Board.Path(g.SurvivorLocation, target);
-    if (step is { Count: > 0 } && g.CanMove(step[0]))
+    var step = PathTo(target);
+    if (step is { Count: > 0 })
     {
+        int to = Furthest(step, g.CanMove);
+        if (to < 0) return false;
         // Don't walk into her while weak.
-        if (step[0] == g.TidewifeLocation && !strong && !g.InFinale) return false;
-        return g.Move(step[0]);
+        if (to == g.TidewifeLocation && !strong && !g.InFinale) return false;
+        return g.Move(to);
     }
     return false;
 }
 
 static class Dump
 {
-    public static void One(int seed, Action<Game, Random> play)
+    public static void One(int seed, Action<Game, Random> play, string? scenario = null)
     {
-        var g = new Game(seed); var r = new Random(1); g.ChooseStartingCards(new[] { 0, 1, 2 });
-        while (!g.IsOver && g.Round < 60) { play(g, r); if (g.Pending is not null) g.ConvertPartials(Array.Empty<int>()); if (!g.IsOver) g.EndTurn(); }
+        var g = new Game(seed, Difficulty.Normal, scenario is null ? null : Scenarios.ById(scenario)); var r = new Random(1); g.ChooseStartingCards(new[] { 0, 1, 2 });
+        while (!g.IsOver && g.Round < 60) { play(g, r); if (g.Pending is not null) g.ConvertPartials(Array.Empty<int>(), Array.Empty<int>()); if (!g.IsOver) g.EndTurn(); }
         foreach (var e in g.Log) Console.WriteLine($"R{e.Round,-2} {e.Kind,-6} {e.Text}");
     }
 }

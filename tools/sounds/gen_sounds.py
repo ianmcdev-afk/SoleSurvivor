@@ -227,9 +227,101 @@ def rain():
     x = hiss + drops + at(thunder, 6.0, dur)
     save('amb_stagnes', loop(x), 0.32)
 
+
+# ------------------------------------------------------------------ new scenarios
+def music_box_notes(notes, step, total, detune=1.0, slow=0.0):
+    """A wind-up music box: plucked metallic tines, optionally slowing down as it winds out."""
+    out = np.zeros(int(SR * total)); tpos = 0.0
+    for i, f in enumerate(notes):
+        dur = 1.6
+        n = int(SR * dur)
+        tine = (tone(f * detune, dur) + 0.35 * tone(f * 2.01 * detune, dur) + 0.12 * tone(f * 5.4, dur)) * env(n, 0.002, 1.4, 5)
+        out += at(tine * 0.5, tpos, total)
+        tpos += step * (1 + slow * i)
+        if tpos > total - 0.2: break
+    return out
+
+def amb_larkspur():
+    dur = 16.0
+    crickets = np.zeros(int(SR * dur))
+    for k in range(int(dur * 2.2)):
+        c = bp(noise(0.05), 4200, 5200) * env(int(SR * .05), 0.002, 0.04, 8)
+        burst = mix(*[at(c, j * 0.07, 0.25) for j in range(3)])
+        crickets += at(burst * rng.uniform(0.1, 0.25), rng.uniform(0, dur - 0.3), dur)
+    hum = 0.25 * lp(noise(dur), 160)
+    # A faint lullaby, a long way off, slightly out of tune.
+    notes = [659.3, 587.3, 523.3, 587.3, 659.3, 659.3, 659.3, 587.3, 587.3, 587.3, 659.3, 784.0, 784.0]
+    box = reverb(music_box_notes(notes, 0.55, dur, detune=0.985), 0.6, 1.4) * 0.18
+    save('amb_larkspur', loop(hum + crickets + box[:int(SR * dur)]), 0.3)
+
+def amb_kestrel():
+    dur = 14.0
+    hiss = bp(noise(dur), 2000, 9000) * 0.18
+    hum = 0.25 * (tone(60, dur) + 0.5 * tone(120, dur) + 0.25 * tone(180, dur))
+    tt = np.linspace(0, dur, int(SR * dur))
+    buzz = 0.08 * np.sign(np.sin(2 * np.pi * 120 * tt)) * (0.6 + 0.4 * (np.sin(2 * np.pi * tt / 3.7) > 0.8))
+    truck = lp(noise(dur), 300) * np.exp(-((tt - 9.0) / 2.0) ** 2) * 0.9
+    save('amb_kestrel', loop(hiss + lp(hum, 400) + lp(buzz, 2000) + truck), 0.3)
+
+def amb_ashgrove():
+    dur = 12.0
+    out = 0.3 * lp(noise(dur), 220) * (0.6 + 0.4 * np.sin(np.linspace(0, 2 * np.pi, int(SR * dur))) ** 2)
+    for k in range(int(dur)):  # a slow grandfather clock: tick ... tock
+        for off, f in ((0.0, 2600), (0.5, 2100)):
+            tk = bp(noise(0.03), f * 0.8, f * 1.2) * env(int(SR * .03), 0.001, 0.025, 10) * 0.6
+            out += at(tk, k + off, dur)
+    creak = tone(np.linspace(180, 140, int(SR * 0.9)), 0.9, 'tri') * env(int(SR * .9), 0.2, 0.6, 3) * 0.12
+    out += at(lp(creak, 900), 6.2, dur)
+    save('amb_ashgrove', loop(out), 0.32)
+
+def tide_larkspur():
+    notes = [784.0, 659.3, 523.3, 587.3, 493.9]
+    x = reverb(music_box_notes(notes, 0.32, 3.0, slow=0.25), 0.5, 1.2)
+    save('tide_larkspur', x, 0.75)
+
+def tide_kestrel():
+    dur = 2.2
+    beep = tone(1000, 1.0) * adsr(int(SR * 1.0), 0.01, 0.05) * 0.5
+    burst = bp(noise(0.7), 800, 8000) * env(int(SR * .7), 0.01, 0.6, 2)
+    x = mix(at(burst, 0.0, dur), at(beep, 0.6, dur), at(burst * 0.6, 1.6, dur))
+    save('tide_kestrel', x, 0.7)
+
+def tide_ashgrove():
+    dur = 3.4; out = np.zeros(int(SR * dur))
+    for i, f in enumerate([523.3, 392.0, 440.0, 293.7]):
+        n = int(SR * 1.6)
+        bell = (tone(f, 1.6) + 0.5 * tone(f * 2.76, 1.6) + 0.25 * tone(f * 5.4, 1.6)) * env(n, 0.003, 1.4, 3)
+        out += at(bell * 0.5, i * 0.42, dur)
+    save('tide_ashgrove', reverb(out, 0.45, 1.3), 0.7)
+
+def drive_car():
+    dur = 1.4; tt = t(dur)
+    rpm = 40 + 60 * np.clip(tt / 0.6, 0, 1) - 20 * np.clip((tt - 0.9) / 0.5, 0, 1)
+    ph = 2 * np.pi * np.cumsum(rpm) / SR
+    engine = np.sign(np.sin(ph)) * 0.5 + 0.3 * np.sin(2 * ph)
+    x = lp(engine, 700) * adsr(len(tt), 0.08, 0.4) + 0.2 * lp(noise(dur), 500) * adsr(len(tt), 0.1, 0.4)
+    save('drive_car', x, 0.42)
+
+def drive_bike():
+    dur = 1.2
+    ring = (tone(2350, 0.5) + 0.6 * tone(3100, 0.5)) * env(int(SR * .5), 0.002, 0.45, 5)
+    chain = np.zeros(int(SR * dur))
+    for k in range(16):
+        c = hp(noise(0.012), 3000) * env(int(SR * .012), 0.001, 0.01, 10) * 0.35
+        chain += at(c, 0.25 + k * 0.055, dur)
+    save('drive_bike', mix(at(ring * 0.5, 0, dur), at(ring * 0.4, 0.12, dur), chain), 0.6)
+
+def unlock():
+    dur = 0.6
+    clack = bp(noise(0.04), 1500, 5000) * env(int(SR * .04), 0.001, 0.03, 10)
+    turn = bp(noise(0.12), 600, 2500) * env(int(SR * .12), 0.01, 0.1, 4) * 0.6
+    x = mix(at(turn, 0.0, dur), at(clack, 0.14, dur), at(clack * 0.7, 0.3, dur))
+    save('unlock', reverb(x, 0.2, 0.4), 0.6)
+
 for fn in [click, card_flip, card_buy, card_discard, dice, chime_up, found, nothing, heal, bell,
            step, hit_killer, miss, killer_move, killer_strike, taken, tide_sting, finale, win, lose,
-           sea, wind, rain]:
+           sea, wind, rain, amb_larkspur, amb_kestrel, amb_ashgrove, tide_larkspur, tide_kestrel, tide_ashgrove,
+           drive_car, drive_bike, unlock]:
     fn()
 files = sorted(f for f in os.listdir(OUT) if f.endswith('.wav'))
 print(len(files), 'sounds,', sum(os.path.getsize(os.path.join(OUT, f)) for f in files) // 1024, 'KB')

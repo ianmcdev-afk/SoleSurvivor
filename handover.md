@@ -1,6 +1,133 @@
 # Sole Survivor: handover
 
-## Status: v1.0.15 (Board-game Horror dice, partial successes, free cards)
+## Status: v1.0.23 (Hand limit 7)
+- **Rule:** `Game.HandLimit` is now 7 (was 4), and the rules text says so.
+- **Balance:** win rates moved by at most a few points (Normal 64–68%, Hard 30–35%), so health was left as it was.
+- **Hand strip:**
+  - Up to 4 cards sit side by side. From 5 cards the hand fans out at a 60 px step (negative right margin), keeping each card's Play button visible.
+  - Hovering a card sets its ZIndex to 100, bringing it to the front so its +1◆ discard is reachable.
+  - `MarketColumn` and `HandColumn` (named in XAML) take star widths proportional to what each side needs, so both shrink equally (via their DownOnly Viewboxes) when crowded.
+- Checker whitelist gained `Panel` and `GridUnitType`.
+
+## v1.0.22 (Horror track dice fit)
+- **Problem:** the Horror-track zone headers put the dice and the band name on one line, so the two-cell Uneasy band (~69 px) clipped its third die.
+- **Fix:** headers now stack the dice (16 px for the current band, 14 px for the others, tight margins) above the band name (10 px), both centred.
+
+## v1.0.21 (Item tiles explain themselves)
+- **`Game.UseBlockedReason(i)`:** gives a few words on why a one-use item can't be used ("needs {killer} here or next door", "you're at full health", "door already barred", "finish your roll first", ...), or null if it can be used.
+- **Item tiles:**
+  - Kept items say "always on: …".
+  - Usable one-use items are gold-bordered buttons, "▶ Click: …".
+  - One-use items that can't be used yet are no longer disabled (faded to 35%). They're plain tiles that show the reason in red-brown.
+- **Fuzzer:** checks that `CanUse` agrees with `UseBlockedReason` for every consumable.
+
+## v1.0.20 (Readable items)
+- **Problem:** the items list (`Viewbox DownOnly`) was being scaled down heavily, because the left column ran out of height.
+- **Items:** now a 2-column `UniformGrid` of 42 px tiles: an icon, the name (ellipsis-trimmed) and a short effect from `ItemShort` (e.g. "+1 fight die", "▶ Use: heal 2"). One-use items are click-to-use buttons with a gold border when usable. The full text is in tooltips, which also show on disabled tiles. 4 items fit at full size; beyond that the list shrinks gently.
+- **Height freed:**
+  - The dice tray text is one line, with the rules in a tooltip.
+  - The action tiles' second line is short ("up to 2 finds", "1 wound each", "heal 1"), with detail in tooltips that now use the killer's name and pronoun rather than a hard-coded "she/her".
+
+## v1.0.19 (Title screen line)
+- The title screen's tagline (`TitleTagline`) is now set by `TitleLine()` in `ShowMenu` from `Scenarios.All.Count`. It reads "Six nights. Six horrors. Only one of you walks out." and updates itself if scenarios are added.
+
+## v1.0.18 (Objective briefing)
+- **When it appears:** `MainWindow.Briefing.cs` adds a `BriefingOverlay` (full design surface, above the game-over panel, below the menu). It's shown by `StartNewGame` (before the starting-card picker) and by a new header button, "◎ Objective".
+- **Left column:**
+  - Title, tagline and blurb.
+  - Three objectives: ★ rescue the victims at the sanctuary (count, escort capacity, Hope); ⚔ defeat the killer (the win condition, current health); ♥ stay alive (finale warning).
+  - A note about locked doors and vehicles, where the scenario has them.
+- **Map (`DrawBriefingMap`):** an 800×580 canvas in a Viewbox, showing:
+  - the theme ground and roads;
+  - animated green dashed routes from every location with victims to the sanctuary, using `Board.Path` that avoids locked doors;
+  - padlocks;
+  - the sanctuary with a pulsing green ring, a glow and a "★ SAFE: bring the {victims} here" banner;
+  - ♟ count badges, a "● You" badge and a "☠ {Killer}" badge;
+  - a legend underneath.
+- **Closing it:** the Continue button reads "Got it: choose your starting cards", or "Back to the night" mid-game. Esc, Enter or Space close it, and other keys are swallowed while it's open. `RenderStartPick` waits while `BriefingOpen`.
+
+## v1.0.17 (Card icons on dice: a 3 costs 2 cards, a 4 costs 1)
+- **Dice faces:** `DiceRoll.CardsFor(v)` is 2 for a 3 (two-card icon), 1 for a 4 (one-card icon) and 0 otherwise. `CardsPerConversion` is gone.
+- **Conversion API:** `DiceRoll.ConvertedDice` (indices) replaces the old int `Converted` field, which is now computed from it, and `IsConverted(i)` is new.
+- **Offer:** `PendingRoll.MaxConversions` is the number of partials you could afford cheapest-first with your hand, capped by the useful successes.
+- **`ConvertPartials(dieIndices, handIndices)`:** each chosen die must be a partial, the number of dice must be at most Max, and the card count must equal the sum of the chosen dice's costs. Pass two empty lists to keep the roll.
+- **UI:**
+  - The die art draws one or two cards by value.
+  - The trade-in panel makes partial dice clickable (with chosen/affordable states and a cost label under each die). Card picks are limited to the chosen dice's total cost.
+  - The button reads "Pick N more card(s)" or "Discard N: X wounds".
+  - Tooltips, tray text, the Horror-track line and the rules are updated.
+- **Sim bots:** the heuristic bot picks the cheapest dice first (the 4s) and pays with its cheapest cards; the random bot makes random affordable choices. The fuzzer checks that cards without dice are refused and that a 3 can't be paid with one card.
+- **Balance:** cheaper conversions made every scenario about 10 points easier, so killer health is now Easy 16 / Normal 19 / Hard 20 (was 14/16/17). Scenario bonuses are unchanged. 4000 games:
+
+  | Scenario | Easy | Normal | Hard |
+  |---|---|---|---|
+  | Gallowmouth | 81.3% | 66.2% | 31.0% |
+  | Whitepine | 82.1% | 67.7% | 35.3% |
+  | St Agnes | 80.8% | 67.9% | 37.9% |
+  | Larkspur Lane | 80.8% | 67.5% | 35.0% |
+  | Kestrel Motel | 81.1% | 68.3% | 36.4% |
+  | Ashgrove House | 77.3% | 64.6% | 34.4% |
+
+  The fuzzer reported 0 errors.
+
+## v1.0.16 (Three new scenarios, locked doors, keys, vehicles)
+- **New scenarios:** originals inspired by the user's three film references. No film characters, names or signature looks are used.
+
+  | Scenario (id) | Setting | Survivor | Killer | Map features |
+  |---|---|---|---|---|
+  | **Larkspur Lane** (`larkspur`) | dream-stalker suburb | Maya Castillo | the Lullaby Man (porcelain moon mask, nightgown, nightcap, brass winding key) | 1 locked door (School–Playground, Janitor's Key), Bicycle (range 2) |
+  | **Kestrel Motel** (`kestrel`) | cursed broadcast | Ruth Abernathy | the Presenter (grey suit, face of static, studio microphone) | 2 locked doors (Office–Honeymoon Suite, Office–Back Rooms, Room Keys), Station Wagon (range 3) |
+  | **Ashgrove House** (`ashgrove`) | indoor puzzle house | Clara Voss | the Curator (velvet coat, porcelain face mended with gold, pocket watch) | 3 locked doors sealing off Gallery/Conservatory/Attic, Brass Keys; indoor theme with floorboards, no fog |
+
+  All three use the St Agnes map topology with their own coordinates, items, events, killer cards and Bloodlust tracks.
+
+- **Doors:**
+  - `ScenarioDef.LockedEdges` and `KeyName`. `Game.IsLocked`, `LockedDoors` and `_unlocked`.
+  - Locked doors block *all walking*, including killer pathing: `Board.Path`/`Distance` now take an optional `canPass` predicate, and Game passes `CanPass` everywhere the killer paths. Teleport cards still work.
+  - Walking or escorting through a locked door with a `Key` uses up the key and unlocks the door permanently (`Travel`).
+  - `Validate` → `CheckKeysReachEverything`: from the sanctuary, keys found in reachable places must open every area, and every starting victim must have a lock-free way home.
+  - `TidewifeNear` ignores adjacency through a locked door.
+- **Vehicles:**
+  - `ScenarioDef.VehicleName`, `VehicleRange`, `VehicleVerb` and `VehicleSound`; `ItemKind.Vehicle` sits in a stash.
+  - `Game.RouteTo(to)`:
+    - On foot it's 1 step, through a locked door only if you hold a key.
+    - With a vehicle it's a breadth-first search up to the range over open roads, not passing *through* the killer's space (stopping there is allowed).
+  - `CanMove` and `CanEscort` use `RouteTo`, and the cost is the same as a walk or escort.
+  - `LastRoute` records the trip for the animation.
+  - `ItemKind.Key` and `ItemKind.Vehicle` items exist only in scenarios that name them (`BuildItems`).
+- **Art:**
+  - `tools/art/gen_art.py` generates `ArtExtra.cs` (24 location icons and 6 figures) plus SVG previews in `/tmp/preview`.
+  - `ArtScenarios.cs` has the themes, the dispatch, the new `Weather` values (Motes, Static, Embers) via `AddMotes`, `AddStatic` and `AddEmbers`, plus `Padlock` and `AddBlink` (the Kestrel tower light).
+  - `Theme.Indoor` draws floorboards instead of grass and skips fog.
+  - The scenery generator has `larkspur()` (lawns, fences, trees, street lamps, mailboxes, parked cars), `kestrel()` (sand drifts, cacti, scrub, tumbleweeds, rocks, telephone poles and wires, drums) and `ashgrove()` (perimeter and interior walls with doorways, rugs, armchairs, candle tables, clocks, ferns, chests). Old scenarios' layers are verified unchanged.
+- **Sound:**
+  - New ambient loops: `amb_larkspur` (crickets and a distant detuned music box), `amb_kestrel` (static hiss, mains hum, neon buzz, a passing truck) and `amb_ashgrove` (grandfather-clock tick-tock and creaks).
+  - Killer-turn stings: `tide_larkspur` (a winding-down music box), `tide_kestrel` (a static burst and 1 kHz tone) and `tide_ashgrove` (clock chimes). They're picked with `Sound.Has`.
+  - Effects: `drive_car`, `drive_bike` and `unlock`. Old WAVs are byte-identical.
+- **UI:**
+  - The route overlay shows every reachable destination; vehicle routes are drawn as accent-coloured polylines.
+  - Padlocks sit on locked roads with tooltips; once opened they show as faint open padlocks.
+  - Location tooltips say walk/cycle/drive and when a key will be used.
+  - Travel animates leg by leg (faster when driving, with the vehicle sound), with an "Unlocked" float and sound. `Snapshot.Locked` is new.
+  - The Walk tile shows the vehicle range. Item glyphs are ⚿ for keys and » for vehicles.
+  - Scenario select is now a 3-wide `WrapPanel` of compact cards (the blurb moved to the tooltip) with a features line, e.g. "Indoors · 3 locked doors".
+  - Rules have a new "Locked doors, keys and vehicles" section.
+- **Balance:**
+  - New scenarios use StartDread 2.
+  - Killer `HealthBonus`: Lullaby Man +3, Presenter +2, Curator +4. The Curator also has a harder-hitting track, because his doors hem him in.
+  - The sim bot paths respect locks (passable with a key) and moves as far along as one move allows.
+  - Win rates (4000 games):
+
+    | Scenario | Easy | Normal | Hard |
+    |---|---|---|---|
+    | Larkspur Lane | 78.9% | 68.5% | 35.6% |
+    | Kestrel Motel | 79.7% | 68.8% | 35.9% |
+    | Ashgrove House | 75.5% | 65.4% | 35.5% |
+
+    The original three are unchanged. The fuzzer reported 0 errors, with a new invariant that the killer never walks through a locked door.
+- **Sim:** `dump <seed> <scenarioId>` now takes a scenario.
+
+## v1.0.15 (Board-game Horror dice, partial successes, free cards)
 - **Dice faces:** these follow the board game.
   - `DieFace` comes from `DiceRoll.Face(v)`: 1-2 Blank, 3-4 Partial (the cards icon), 5-6 Success (the star).
   - `SuccessThreshold` is now 5.

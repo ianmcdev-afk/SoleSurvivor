@@ -103,22 +103,26 @@ public partial class MainWindow
         {
             int dice = Game.HorrorDiceFor(from, false);
             bool here = !g.InFinale && g.Dread >= from && g.Dread <= to || (g.InFinale && to == Game.MaxDread);
-            var label = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
+            // Dice on one line, the band's name underneath, both centred: three dice fit even in the two-cell Uneasy band.
+            var dicePanel = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
             for (int d = 0; d < dice; d++)
-                label.Children.Add(new TextBlock
+                dicePanel.Children.Add(new TextBlock
                 {
                     Text = "⚄",
-                    FontSize = here ? 17 : 14,
-                    Margin = new Thickness(1, -2, 1, 0),
+                    FontSize = here ? 16 : 14,
+                    Margin = new Thickness(0.5, -2, 0.5, -2),
                     Foreground = here ? Art.Hex(colour) : Art.Hex("#4A5E5E")
                 });
+            var label = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
+            label.Children.Add(dicePanel);
             label.Children.Add(new TextBlock
             {
-                Text = $"  {name}",
-                FontSize = 10.5,
+                Text = name,
+                FontSize = 10,
                 FontWeight = here ? FontWeights.Bold : FontWeights.Normal,
                 Foreground = here ? Art.Hex(colour) : Art.Hex("#5F7676"),
-                VerticalAlignment = VerticalAlignment.Center
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, -1, 0, 0)
             });
             var zone = new Border
             {
@@ -171,7 +175,7 @@ public partial class MainWindow
 
         DreadText.Text = g.InFinale ? g.DreadLabel : $"{g.DreadLabel}  ·  Dread {g.Dread}/{Game.MaxDread}";
         DreadText.Foreground = g.InFinale || g.Dread >= 6 ? Art.Danger : g.Dread >= 3 ? Art.Hex("#C9893E") : Art.TextColor;
-        ThresholdText.Text = $"Horror roll: {current} {(current == 1 ? "die" : "dice")}, plus cards and gear. ★ 5-6 succeeds; ▮▮ 3-4 succeeds for 2 cards.";
+        ThresholdText.Text = $"Horror roll: {current} {(current == 1 ? "die" : "dice")}, plus cards and gear. ★ 5-6 succeeds; ▮▮ 3 for 2 cards, ▮ 4 for 1 card.";
     }
 
     // ------------------------------------------------------------------ events
@@ -305,7 +309,8 @@ public partial class MainWindow
     private void RenderActions()
     {
         var g = _game;
-        WalkModeText.Text = g.MoveTokens > 0 ? $"free walks: {g.MoveTokens}" : $"{Game.CostMove} time per step";
+        WalkModeText.Text = (g.MoveTokens > 0 ? $"free walks: {g.MoveTokens}" : $"{Game.CostMove} time per move")
+            + (g.HasVehicle ? $" · {g.Scenario.VehicleName}: up to {g.Scenario.VehicleRange}" : "");
         EscortModeText.Text = g.InFinale ? "no one left to save"
             : g.EscortTokens > 0 ? $"free escorts: {g.EscortTokens}" : $"{g.EscortCost} time, up to {g.EscortCapacity} {g.Scenario.Victims}";
         EscortMode.IsEnabled = !g.InFinale && !g.IsOver;
@@ -321,14 +326,17 @@ public partial class MainWindow
         TokensText.Text = string.Join("    ", tokens);
         TokensText.Visibility = tokens.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
 
-        SearchButton.Content = Tile("⌕", "Search", $"{Game.CostSearch} time · {g.SearchDice()} dice", "find up to 2 things", Art.Warm);
+        string killer = g.Scenario.Killer.NameLower, she = g.Scenario.Killer.SheLower;
+        SearchButton.Content = Tile("⌕", "Search", $"{Game.CostSearch} time · {g.SearchDice()} dice", "up to 2 finds", Art.Warm);
         SearchButton.IsEnabled = g.CanSearch && !_busy;
-        SearchButton.ToolTip = g.StashCount(g.SurvivorLocation) == 0 ? "Nothing left to find here." : $"{g.StashCount(g.SurvivorLocation)} things hidden here.";
-        FightButton.Content = Tile("⚔", "Fight", $"{Game.CostFight} time · {g.FightDice()} dice", "1 wound per success", Art.Danger);
+        SearchButton.ToolTip = "Find up to 2 things hidden here, 1 per success.\n"
+            + (g.StashCount(g.SurvivorLocation) == 0 ? "Nothing left to find here." : $"{g.StashCount(g.SurvivorLocation)} things hidden here.");
+        FightButton.Content = Tile("⚔", "Fight", $"{Game.CostFight} time · {g.FightDice()} dice", "1 wound each", Art.Danger);
         FightButton.IsEnabled = g.CanFight && !_busy;
-        FightButton.ToolTip = g.TidewifeHere ? "She's here. Strike!" : "She must be in your location.";
-        RestButton.Content = Tile("☾", "Rest", $"{Game.CostRest} time", "heal 1, not beside her", Art.Accent);
+        FightButton.ToolTip = "1 wound per success.\n" + (g.TidewifeHere ? $"{g.Scenario.Killer.She}'s here. Strike!" : $"{g.Scenario.Killer.Name} must be in your location.");
+        RestButton.Content = Tile("☾", "Rest", $"{Game.CostRest} time", "heal 1", Art.Accent);
         RestButton.IsEnabled = g.CanRest && !_busy;
+        RestButton.ToolTip = $"Heal 1. Not while {killer} is beside you{(g.TidewifeHere ? $" ({she} is!)" : "")}.";
 
         SteelCheck.IsEnabled = g.Hope > 0 && !g.IsOver;
         if (g.Hope == 0) g.SteelYourself = false;
@@ -351,10 +359,11 @@ public partial class MainWindow
     };
 
     /// <summary>
-    /// A red Horror die like the board game's: 5-6 show a star (success), 3-4 show two cards (partial: trade in
-    /// 2 cards to make it a success), 1-2 are blank. The number sits small in the corner.
+    /// A red Horror die like the board game's: 5-6 show a star (success); a 3 shows two cards and a 4 shows one card
+    /// (partials: discard that many cards to make it a success); 1-2 are blank. The number sits small in the corner.
+    /// <paramref name="chosen"/> marks a partial picked in the trade-in panel.
     /// </summary>
-    private static Border Die(int value, DieLook look, double angle = 0, double size = 40)
+    private static Border Die(int value, DieLook look, double angle = 0, double size = 40, bool chosen = false)
     {
         double k = size / 40;
         var canvas = new Canvas { Width = 40, Height = 40 };
@@ -375,8 +384,11 @@ public partial class MainWindow
         }
         else if (cards)
         {
-            // Two little cards, the trade-in icon.
-            foreach (var (x, y, rot) in new[] { (11.0, 11.0, -12.0), (19.0, 12.0, 10.0) })
+            // The trade-in icon: two cards on a 3, one card on a 4. That's how many you discard.
+            var icon = DiceRoll.CardsFor(value) == 2
+                ? new[] { (11.0, 11.0, -12.0), (19.0, 12.0, 10.0) }
+                : new[] { (15.0, 11.5, 0.0) };
+            foreach (var (x, y, rot) in icon)
             {
                 var c = new System.Windows.Shapes.Rectangle
                 {
@@ -395,7 +407,7 @@ public partial class MainWindow
         if (look == DieLook.Converted)
         {
             // A small cards badge: this success was bought with cards.
-            var badge = new TextBlock { Text = "▮▮", FontSize = 7, Foreground = Art.Hex("#FFE3DE") };
+            var badge = new TextBlock { Text = DiceRoll.CardsFor(value) == 2 ? "▮▮" : "▮", FontSize = 7, Foreground = Art.Hex("#FFE3DE") };
             Canvas.SetLeft(badge, 3);
             Canvas.SetTop(badge, 29);
             canvas.Children.Add(badge);
@@ -416,16 +428,16 @@ public partial class MainWindow
             Margin = new Thickness(0, 0, 8 * k, 8 * k),
             CornerRadius = new CornerRadius(8 * k),
             Background = new LinearGradientBrush(top, bottom, 90),
-            BorderBrush = edge,
-            BorderThickness = new Thickness(look is DieLook.Success or DieLook.Converted ? 2.5 : look == DieLook.Partial ? 1.8 : 1),
+            BorderBrush = chosen ? Art.Warm : edge,
+            BorderThickness = new Thickness(chosen || look is DieLook.Success or DieLook.Converted ? 2.5 : look == DieLook.Partial ? 1.8 : 1),
             Child = new Viewbox { Child = canvas },
             RenderTransformOrigin = new Point(0.5, 0.5),
             RenderTransform = new RotateTransform(angle),
             ToolTip = look switch
             {
                 DieLook.Success => $"{value}: success",
-                DieLook.Converted => $"{value}: partial, made a success by discarding 2 cards",
-                DieLook.Partial => $"{value}: partial. Discard 2 cards to make it a success",
+                DieLook.Converted => $"{value}: partial, made a success by discarding {Plural(DiceRoll.CardsFor(value), "card", "cards")}",
+                DieLook.Partial => $"{value}: partial. Discard {Plural(DiceRoll.CardsFor(value), "card", "cards")} to make it a success",
                 DieLook.Blank => $"{value}: nothing",
                 _ => null
             }
@@ -442,19 +454,9 @@ public partial class MainWindow
         return die;
     }
 
-    /// <summary>The look of each die in a roll, marking the first N partials as converted.</summary>
-    private static List<DieLook> Looks(DiceRoll roll)
-    {
-        var looks = new List<DieLook>();
-        int toConvert = roll.Converted;
-        foreach (int v in roll.Values)
-        {
-            var look = LookFor(v);
-            if (look == DieLook.Partial && toConvert > 0) { look = DieLook.Converted; toConvert--; }
-            looks.Add(look);
-        }
-        return looks;
-    }
+    /// <summary>The look of each die in a roll; dice bought with cards show as converted.</summary>
+    private static List<DieLook> Looks(DiceRoll roll) =>
+        roll.Values.Select((v, i) => roll.IsConverted(i) ? DieLook.Converted : LookFor(v)).ToList();
 
     /// <summary>Tumble the dice for a moment, then land on the real result.</summary>
     private async Task RollDiceAsync(DiceRoll roll, bool enemy)
@@ -493,7 +495,8 @@ public partial class MainWindow
         {
             DiceTitle.Text = "Dice";
             DiceTitle.Foreground = Art.Warm;
-            DiceText.Text = "Search and Fight roll Horror dice. ★ (5-6) succeeds; ▮▮ (3-4) succeeds if you discard 2 cards.";
+            DiceText.Text = "Search and Fight roll Horror dice here.";
+            DiceText.ToolTip = "★ 5-6 succeeds. A 3 (two cards) can be bought for 2 cards, a 4 (one card) for 1. 1-2 are blank.";
             return;
         }
         DiceTitle.Text = roll.Label;
@@ -504,8 +507,8 @@ public partial class MainWindow
         int partialsLeft = roll.Partials - roll.Converted;
         DiceText.Text = $"{roll.Successes} success{(roll.Successes == 1 ? "" : "es")}"
             + (roll.Converted > 0 ? $" ({roll.Converted} bought with cards)" : "")
-            + (_game.Pending is not null && ReferenceEquals(_game.Pending.Roll, roll) ? $" · {partialsLeft} partial: trade in cards?" : "")
-            + ". ★ 5-6 succeeds; ▮▮ 3-4 can be bought for 2 cards.";
+            + (_game.Pending is not null && ReferenceEquals(_game.Pending.Roll, roll) ? $" · {partialsLeft} partial: trade in cards?" : "");
+        DiceText.ToolTip = "★ 5-6 succeeds. A 3 (two cards) can be bought for 2 cards, a 4 (one card) for 1. 1-2 are blank.";
     }
 
     // ------------------------------------------------------------------ cards
@@ -705,8 +708,27 @@ public partial class MainWindow
 
         HandTitle.Text = $"YOUR HAND ({g.Hand.Count}/{Game.HandLimit})";
         HandPanel.Children.Clear();
+        // Up to 4 cards sit side by side. Past that the hand fans out: each card overlaps the next, its left side
+        // (with Play) still showing; hovering a card lifts it to the front so all of it, Discard included, is reachable.
+        const double slot = CardWidth + 6;
+        double step = g.Hand.Count <= 4 ? slot : 60;
         for (int i = 0; i < g.Hand.Count; i++)
-            HandPanel.Children.Add(HandCard(i));
+        {
+            var hc = HandCard(i);
+            if (step < slot && i < g.Hand.Count - 1)
+                hc.Margin = new Thickness(hc.Margin.Left, hc.Margin.Top, hc.Margin.Right - (slot - step), hc.Margin.Bottom);
+            Panel.SetZIndex(hc, i);
+            int z = i;
+            hc.MouseEnter += (_, _) => Panel.SetZIndex(hc, 100);
+            hc.MouseLeave += (_, _) => Panel.SetZIndex(hc, z);
+            HandPanel.Children.Add(hc);
+        }
+
+        // Share the strip under the board by what each side needs, so both shrink equally (if at all).
+        double marketNeed = Math.Max(2, g.Market.Count) * slot;
+        double handNeed = g.Hand.Count == 0 ? 2 * slot : slot + (g.Hand.Count - 1) * step;
+        MarketColumn.Width = new GridLength(marketNeed, GridUnitType.Star);
+        HandColumn.Width = new GridLength(Math.Max(handNeed, 2 * slot), GridUnitType.Star);
         if (g.Hand.Count == 0)
             HandPanel.Children.Add(new TextBlock
             {
@@ -725,7 +747,7 @@ public partial class MainWindow
     private void RenderStartPick()
     {
         var g = _game;
-        if (!g.AwaitingStartPick || MenuOpen)
+        if (!g.AwaitingStartPick || MenuOpen || BriefingOpen)
         {
             StartPickOverlay.Visibility = Visibility.Collapsed;
             return;
@@ -757,10 +779,11 @@ public partial class MainWindow
     // ------------------------------------------------------------------ partial dice: trade cards in
 
     private readonly HashSet<int> _convertPicks = new();
+    private readonly HashSet<int> _convertDice = new();
 
     /// <summary>
-    /// After a roll with partials (3 or 4), choose cards from your hand to discard: every 2 cards turn one partial
-    /// into a success. Nothing else can happen until you convert or keep the roll.
+    /// After a roll with partials, click the dice to convert (a 3 shows two cards, a 4 shows one), then pick exactly
+    /// that many cards from your hand to discard. Nothing else can happen until you convert or keep the roll.
     /// </summary>
     private void RenderRollChoice()
     {
@@ -768,50 +791,77 @@ public partial class MainWindow
         if (g.Pending is not { } p || MenuOpen || _busy)
         {
             RollChoiceOverlay.Visibility = Visibility.Collapsed;
-            if (g.Pending is null) _convertPicks.Clear();
+            if (g.Pending is null) { _convertPicks.Clear(); _convertDice.Clear(); }
             return;
         }
         RollChoiceOverlay.Visibility = Visibility.Visible;
         _convertPicks.RemoveWhere(i => i >= g.Hand.Count);
+        _convertDice.RemoveWhere(i => i >= p.Roll.Values.Count || DiceRoll.CardsFor(p.Roll.Values[i]) == 0);
+
+        int need = _convertDice.Sum(i => DiceRoll.CardsFor(p.Roll.Values[i]));
+        // If a choice of dice now costs fewer cards than are picked, drop the extra picks.
+        while (_convertPicks.Count > need) _convertPicks.Remove(_convertPicks.Max());
 
         RollChoiceDice.Children.Clear();
-        var looks = Looks(p.Roll);
-        int picksAsConversions = _convertPicks.Count / Game.CardsPerConversion;
-        int shown = 0;
         for (int i = 0; i < p.Roll.Values.Count; i++)
         {
-            var look = looks[i];
-            if (look == DieLook.Partial && shown < picksAsConversions) { look = DieLook.Converted; shown++; }
-            RollChoiceDice.Children.Add(Die(p.Roll.Values[i], look, 0, 48));
+            int index = i;
+            int value = p.Roll.Values[i];
+            int cost = DiceRoll.CardsFor(value);
+            bool chosen = _convertDice.Contains(index);
+            var die = Die(value, chosen ? DieLook.Converted : LookFor(value), 0, 52, chosen);
+            if (cost > 0)
+            {
+                int othersCost = need - (chosen ? cost : 0);
+                bool canAdd = chosen || (_convertDice.Count < p.MaxConversions && othersCost + cost <= g.Hand.Count);
+                die.Cursor = canAdd ? System.Windows.Input.Cursors.Hand : System.Windows.Input.Cursors.No;
+                die.ToolTip = chosen ? $"Chosen: costs {Plural(cost, "card", "cards")}. Click to un-choose."
+                    : canAdd ? $"Click to turn this {value} into a success for {Plural(cost, "card", "cards")}."
+                    : $"Needs {Plural(cost, "card", "cards")}; you can't afford it with the dice already chosen.";
+                if (!canAdd) die.Opacity = 0.6;
+                die.MouseLeftButtonUp += (_, _) =>
+                {
+                    if (!_convertDice.Remove(index) && canAdd) _convertDice.Add(index);
+                    RenderRollChoice();
+                };
+            }
+            var stack = new StackPanel { Margin = new Thickness(4, 0, 4, 0) };
+            stack.Children.Add(die);
+            stack.Children.Add(new TextBlock
+            {
+                Text = cost == 0 ? (DiceRoll.Face(value) == DieFace.Success ? "success" : "blank") : chosen ? "✓ chosen" : $"{Plural(cost, "card", "cards")}",
+                FontSize = 11, HorizontalAlignment = HorizontalAlignment.Center,
+                Foreground = chosen ? Art.Warm : cost > 0 ? Art.Hex("#F0B0A8") : Art.Dim
+            });
+            RollChoiceDice.Children.Add(stack);
         }
 
-        int after = p.Roll.Successes + picksAsConversions;
+        int after = p.Roll.Successes + _convertDice.Count;
         RollChoiceSub.Text = $"{p.Roll.Label}: {Plural(p.Roll.Stars, "success", "successes")} and {Plural(p.Roll.Partials, "partial", "partials")}. "
-            + $"Discard {Game.CardsPerConversion} cards for each partial you want to turn into a success (up to {p.MaxConversions}).";
+            + $"Click a die showing cards to choose it (up to {p.MaxConversions}): a 3 costs 2 cards, a 4 costs 1. Then pick that many cards to discard.";
 
         RollChoiceHand.Children.Clear();
-        int maxPicks = p.MaxConversions * Game.CardsPerConversion;
         for (int i = 0; i < g.Hand.Count; i++)
         {
             int index = i;
             bool selected = _convertPicks.Contains(index);
-            bool full = _convertPicks.Count >= maxPicks;
+            bool full = _convertPicks.Count >= need;
             RollChoiceHand.Children.Add(CardButton(g.Hand[i],
-                selected ? "✓ Discard" : full ? "Enough picked" : "Pick to discard",
+                selected ? "✓ Discard" : need == 0 ? "Choose a die first" : full ? "Enough picked" : "Pick to discard",
                 enabled: selected || !full, inHand: true,
                 onClick: () =>
                 {
-                    if (!_convertPicks.Remove(index) && _convertPicks.Count < maxPicks) _convertPicks.Add(index);
+                    if (!_convertPicks.Remove(index) && _convertPicks.Count < need) _convertPicks.Add(index);
                     RenderRollChoice();
                 },
                 raw: true, selected: selected));
         }
 
-        bool even = _convertPicks.Count % Game.CardsPerConversion == 0;
-        RollChoiceConvert.IsEnabled = _convertPicks.Count > 0 && even;
-        RollChoiceConvert.Content = _convertPicks.Count == 0 ? "Pick cards to discard"
-            : !even ? $"Pick {Game.CardsPerConversion - _convertPicks.Count % Game.CardsPerConversion} more"
-            : $"Discard {_convertPicks.Count}: {(p.Purpose == "fight" ? Plural(after, "wound", "wounds") : $"{after} success{(after == 1 ? "" : "es")}")}";
+        string result = p.Purpose == "fight" ? Plural(after, "wound", "wounds") : $"{after} success{(after == 1 ? "" : "es")}";
+        RollChoiceConvert.IsEnabled = need > 0 && _convertPicks.Count == need;
+        RollChoiceConvert.Content = need == 0 ? "Choose a die to convert"
+            : _convertPicks.Count < need ? $"Pick {need - _convertPicks.Count} more card{(need - _convertPicks.Count == 1 ? "" : "s")}"
+            : $"Discard {need}: {result}";
         RollChoiceKeep.Content = p.Purpose == "fight"
             ? $"Keep the roll ({Plural(p.Roll.Successes, "wound", "wounds")})"
             : $"Keep the roll ({p.Roll.Successes} success{(p.Roll.Successes == 1 ? "" : "es")})";
@@ -819,15 +869,18 @@ public partial class MainWindow
 
     private void RollChoiceConvert_Click(object sender, RoutedEventArgs e)
     {
+        var dice = _convertDice.ToList();
         var picks = _convertPicks.ToList();
+        _convertDice.Clear();
         _convertPicks.Clear();
-        Perform(() => _game.ConvertPartials(picks));
+        Perform(() => _game.ConvertPartials(dice, picks));
     }
 
     private void RollChoiceKeep_Click(object sender, RoutedEventArgs e)
     {
+        _convertDice.Clear();
         _convertPicks.Clear();
-        Perform(() => _game.ConvertPartials(Array.Empty<int>()));
+        Perform(() => _game.ConvertPartials(Array.Empty<int>(), Array.Empty<int>()));
     }
 
     private async void StartPickConfirm_Click(object sender, RoutedEventArgs e)
@@ -859,67 +912,107 @@ public partial class MainWindow
         ItemKind.Bandages => "✚",
         ItemKind.BlessedSalt => "❄",
         ItemKind.IronNails => "▦",
+        ItemKind.Key => "⚿",
+        ItemKind.Vehicle => "»",
         _ => "?"
     };
 
+    /// <summary>A few words for an item tile; the full rules text is in its tooltip.</summary>
+    private string ItemShort(ItemDef def) => def.Kind switch
+    {
+        ItemKind.BoatHook or ItemKind.GuttingKnife => "+1 fight die",
+        ItemKind.Lantern => "+1 search die",
+        ItemKind.Rope => "+1 escort",
+        ItemKind.FlareGun => "2 wounds, near",
+        ItemKind.Bandages => "heal 2",
+        ItemKind.BlessedSalt => "1 wound + ward",
+        ItemKind.IronNails => "bar the door",
+        ItemKind.Key => "used at a locked door",
+        ItemKind.Vehicle => $"walk up to {_game.Scenario.VehicleRange} spaces",
+        _ => ""
+    };
+
+    /// <summary>
+    /// Your items as tiles, two to a row: icon, name and what it does at a glance. One-use items are buttons:
+    /// click to use. Full text in the tooltip. Stays readable however many you carry (shrinks only past eight).
+    /// </summary>
     private void RenderItems()
     {
         var g = _game;
         ItemsPanel.Children.Clear();
         if (g.Inventory.Count == 0)
         {
-            ItemsPanel.Children.Add(new TextBlock { Text = "Nothing yet. Search locations marked ✦ to find gear.", Foreground = Art.Dim, TextWrapping = TextWrapping.Wrap });
+            ItemsPanel.Columns = 1;
+            ItemsPanel.Children.Add(new TextBlock { Text = "Nothing yet. Search places marked ✦ to find gear.", Foreground = Art.Dim, FontSize = 13, TextWrapping = TextWrapping.Wrap });
             return;
         }
+        ItemsPanel.Columns = 2;
         for (int i = 0; i < g.Inventory.Count; i++)
         {
             int index = i;
             var def = Items.All[g.Inventory[i]];
-            var row = new DockPanel { Margin = new Thickness(0, 3, 0, 3) };
+            bool usable = def.Consumable && g.CanUse(index) && !_busy;
+            string? blocked = def.Consumable && !usable ? g.UseBlockedReason(index) ?? "not right now" : null;
+            Brush tint = def.Consumable ? Art.Warm : Art.Accent;
 
             var icon = new Border
             {
-                Width = 34, Height = 34,
+                Width = 32, Height = 32,
                 CornerRadius = new CornerRadius(8),
                 Background = def.Consumable ? Art.Hex("#3A2E14") : Art.Hex("#14302B"),
-                BorderBrush = def.Consumable ? Art.Warm : Art.Accent,
+                BorderBrush = tint,
                 BorderThickness = new Thickness(1),
-                Margin = new Thickness(0, 0, 10, 0),
-                Child = new TextBlock
-                {
-                    Text = ItemGlyph(def.Kind),
-                    FontSize = 17,
-                    Foreground = def.Consumable ? Art.Warm : Art.Accent,
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center
-                }
+                Margin = new Thickness(0, 0, 8, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+                Child = new TextBlock { Text = ItemGlyph(def.Kind), FontSize = 17, Foreground = tint, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center }
             };
             DockPanel.SetDock(icon, Dock.Left);
-            row.Children.Add(icon);
-
-            if (def.Consumable)
+            var words = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            words.Children.Add(new TextBlock { Text = def.Name, FontWeight = FontWeights.Bold, FontSize = 13, Foreground = tint, TextTrimming = TextTrimming.CharacterEllipsis });
+            words.Children.Add(new TextBlock
             {
-                var use = new Button
+                // Kept items work by themselves; one-use items say "click to use", or why not yet.
+                Text = !def.Consumable ? $"always on: {ItemShort(def)}" : usable ? $"▶ Click: {ItemShort(def)}" : blocked!,
+                FontSize = 11.5, Foreground = usable ? Art.Warm : blocked is not null ? Art.Hex("#C9897E") : Art.Accent,
+                TextTrimming = TextTrimming.CharacterEllipsis
+            });
+            var face = new DockPanel();
+            face.Children.Add(icon);
+            face.Children.Add(words);
+
+            string tip = $"{def.Name} ({(def.Consumable ? "one use" : "kept: works by itself, nothing to click")})\n{def.Text}"
+                + (def.Consumable ? (usable ? "\n\nClick to use it." : $"\n\nNot yet: {blocked}.") : "");
+            FrameworkElement tile;
+            if (usable)
+            {
+                var button = new Button
                 {
                     Style = (Style)FindResource("ActionButton"),
-                    Content = "Use",
-                    Width = 54,
-                    Margin = new Thickness(8, 0, 0, 0),
-                    HorizontalContentAlignment = HorizontalAlignment.Center,
-                    IsEnabled = g.CanUse(index) && !_busy
+                    Padding = new Thickness(6, 4, 6, 4),
+                    HorizontalContentAlignment = HorizontalAlignment.Stretch,
+                    BorderBrush = Art.Warm,
+                    Content = face
                 };
-                use.Click += (_, _) => Perform(() => g.Use(index));
-                DockPanel.SetDock(use, Dock.Right);
-                row.Children.Add(use);
+                button.Click += (_, _) => Perform(() => g.Use(index));
+                tile = button;
             }
-
-            var text = new TextBlock { TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
-            text.Inlines.Add(new Run(def.Name) { FontWeight = FontWeights.Bold, Foreground = def.Consumable ? Art.Warm : Art.Accent });
-            text.Inlines.Add(new Run(def.Consumable ? "  (one use)" : "  (kept)") { Foreground = Art.Dim, FontSize = 11 });
-            text.Inlines.Add(new LineBreak());
-            text.Inlines.Add(new Run(def.Text) { Foreground = Art.Dim, FontSize = 11.5 });
-            row.Children.Add(text);
-            ItemsPanel.Children.Add(row);
+            else
+            {
+                // Not a button, so it doesn't fade out: kept items, and one-use items waiting for their moment.
+                tile = new Border
+                {
+                    CornerRadius = new CornerRadius(6),
+                    Background = def.Consumable ? Art.Hex("#1E1E1C") : Art.Hex("#14262B"),
+                    BorderBrush = def.Consumable ? Art.Hex("#4A3E2A") : Art.Edge,
+                    BorderThickness = new Thickness(1),
+                    Padding = new Thickness(6, 4, 6, 4),
+                    Child = face
+                };
+            }
+            tile.Height = 42;
+            tile.Margin = new Thickness(index % 2 == 0 ? 0 : 3, 0, index % 2 == 0 ? 3 : 0, 5);
+            tile.ToolTip = tip;
+            ItemsPanel.Children.Add(tile);
         }
     }
 

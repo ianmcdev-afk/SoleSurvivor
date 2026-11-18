@@ -28,6 +28,8 @@
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
                 <TextBlock x:Name="HeaderDifficulty" VerticalAlignment="Center" Foreground="{StaticResource DimBrush}" Margin="0,0,14,0"/>
                 <Button x:Name="MuteButton" Content="♪  Sound on" Style="{StaticResource ActionButton}" HorizontalContentAlignment="Center" Width="110" Margin="0,0,8,0" Click="Mute_Click"/>
+                <Button Content="◎  Objective" Style="{StaticResource ActionButton}" HorizontalContentAlignment="Center" Width="110" Margin="0,0,8,0" Click="Objective_Click"
+                        ToolTip="What you're trying to do tonight, and where to bring people to safety"/>
                 <Button Content="How to play" Style="{StaticResource ActionButton}" HorizontalContentAlignment="Center" Width="110" Margin="0,0,8,0" Click="Rules_Click"/>
                 <Button Content="☰  Menu  (Esc)" Style="{StaticResource ActionButton}" HorizontalContentAlignment="Center" Width="120" Click="Menu_Click"/>
             </StackPanel>
@@ -151,7 +153,7 @@
                         <!-- Items: shrink to fit rather than scroll -->
                         <TextBlock Grid.Row="3" Text="Items" Style="{StaticResource SideTitle}"/>
                         <Viewbox Grid.Row="5" Stretch="Uniform" StretchDirection="DownOnly" VerticalAlignment="Top" HorizontalAlignment="Left">
-                            <StackPanel x:Name="ItemsPanel" Width="306"/>
+                            <UniformGrid x:Name="ItemsPanel" Columns="2" Width="306"/>
                         </Viewbox>
                     </Grid>
                 </DockPanel>
@@ -272,9 +274,9 @@
                 <!-- Cards: always visible under the board -->
                 <Grid Grid.Row="2">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="5*"/>
+                        <ColumnDefinition x:Name="MarketColumn" Width="5*"/>
                         <ColumnDefinition Width="10"/>
-                        <ColumnDefinition Width="4*"/>
+                        <ColumnDefinition x:Name="HandColumn" Width="4*"/>
                     </Grid.ColumnDefinitions>
 
                     <Border Grid.Column="0" Style="{StaticResource Panel}" Padding="10,6,4,6" Background="#132A2F">
@@ -399,6 +401,37 @@
             </Border>
         </Border>
         <!-- ============================================================ FRONT END -->
+        <!-- The night's objective: shown at the start of every new game, and from the header's Objective button -->
+        <Border x:Name="BriefingOverlay" Background="#E6060B0D" Visibility="Collapsed">
+            <Border Style="{StaticResource Panel}" Width="1360" HorizontalAlignment="Center" VerticalAlignment="Center" Padding="26,20">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="440"/>
+                        <ColumnDefinition Width="24"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <TextBlock x:Name="BriefTitle" FontFamily="Georgia" FontSize="34" FontWeight="Bold" Foreground="{StaticResource WarmBrush}"/>
+                        <TextBlock x:Name="BriefTagline" FontFamily="Georgia" FontStyle="Italic" FontSize="15" Foreground="{StaticResource DimBrush}" TextWrapping="Wrap" Margin="0,2,0,10"/>
+                        <TextBlock x:Name="BriefIntro" FontSize="13.5" TextWrapping="Wrap" Margin="0,0,0,14"/>
+                        <TextBlock Text="TONIGHT'S OBJECTIVES" FontWeight="Bold" FontSize="12" Foreground="{StaticResource DimBrush}" Margin="0,0,0,6"/>
+                        <StackPanel x:Name="BriefGoals"/>
+                        <TextBlock x:Name="BriefNote" FontSize="12" Foreground="{StaticResource DimBrush}" TextWrapping="Wrap" Margin="0,10,0,16"/>
+                        <Button x:Name="BriefContinue" Style="{StaticResource BigButton}" HorizontalAlignment="Left" MinWidth="300" Click="BriefContinue_Click"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
+                        <TextBlock x:Name="BriefMapTitle" FontFamily="Georgia" FontSize="17" FontWeight="Bold" Foreground="{StaticResource WarmBrush}" Margin="0,0,0,6"/>
+                        <Border CornerRadius="10" ClipToBounds="True" BorderBrush="{StaticResource EdgeBrush}" BorderThickness="1">
+                            <Viewbox Stretch="Uniform">
+                                <Canvas x:Name="BriefMap" Width="800" Height="580" ClipToBounds="True"/>
+                            </Viewbox>
+                        </Border>
+                        <WrapPanel x:Name="BriefLegend" Margin="0,8,0,0"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Border>
+
         <Grid x:Name="MenuOverlay" Visibility="Collapsed">
             <Grid.Background>
                 <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
@@ -416,7 +449,7 @@
                             <DropShadowEffect Color="#6CC3B0" BlurRadius="30" ShadowDepth="0" Opacity="0.55"/>
                         </TextBlock.Effect>
                     </TextBlock>
-                    <TextBlock Text="Three nights. Three horrors. Only one of you walks out." FontFamily="Georgia" FontStyle="Italic" FontSize="18"
+                    <TextBlock x:Name="TitleTagline" Text="Six nights. Six horrors. Only one of you walks out." FontFamily="Georgia" FontStyle="Italic" FontSize="18"
                                Foreground="{StaticResource DimBrush}" Margin="4,0,0,36"/>
                     <Button x:Name="ContinueButton" Style="{StaticResource MenuButton}" Click="Continue_Click">
                         <StackPanel>
@@ -433,18 +466,18 @@
             </Grid>
 
             <!-- Scenario select -->
-            <Grid x:Name="ScenarioPanel" Visibility="Collapsed" Margin="60,40">
+            <Grid x:Name="ScenarioPanel" Visibility="Collapsed" Margin="60,24">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
-                <StackPanel Grid.Row="0" HorizontalAlignment="Center" Margin="0,0,0,24">
+                <StackPanel Grid.Row="0" HorizontalAlignment="Center" Margin="0,0,0,14">
                     <TextBlock Text="CHOOSE YOUR NIGHT" FontFamily="Georgia" FontSize="34" FontWeight="Bold" Foreground="{StaticResource WarmBrush}" HorizontalAlignment="Center"/>
                     <TextBlock Text="Each night has its own place, its own survivor and its own horror." FontFamily="Georgia" FontStyle="Italic" FontSize="15" Foreground="{StaticResource DimBrush}" HorizontalAlignment="Center" Margin="0,4,0,0"/>
                 </StackPanel>
-                <StackPanel Grid.Row="1" x:Name="ScenarioCards" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                <StackPanel Grid.Row="2" HorizontalAlignment="Center" Margin="0,24,0,0">
+                <WrapPanel Grid.Row="1" x:Name="ScenarioCards" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="1200"/>
+                <StackPanel Grid.Row="2" HorizontalAlignment="Center" Margin="0,12,0,0">
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                         <TextBlock Text="Difficulty" Foreground="{StaticResource DimBrush}" FontSize="14" VerticalAlignment="Center" Margin="0,0,14,0"/>
                         <RadioButton x:Name="PickEasy" GroupName="PickDiff" Style="{StaticResource ModeToggle}" Width="110" Margin="0,0,6,0" Click="PickDifficulty_Click"><TextBlock Text="Easy" HorizontalAlignment="Center"/></RadioButton>

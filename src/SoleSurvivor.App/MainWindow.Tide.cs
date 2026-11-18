@@ -25,7 +25,8 @@ public partial class MainWindow
 
         SetStage(Stage.TideCard);
         var sc = g.Scenario;
-        Sound.Play(tide.IsFinaleTide ? "finale" : "tide", tide.IsFinaleTide ? 0.6 : 0.8);
+        // Each place has its own sting for the killer's turn where one exists (a music box, a TV tone, a clock).
+        Sound.Play(tide.IsFinaleTide ? "finale" : Sound.Has($"tide_{sc.Id}") ? $"tide_{sc.Id}" : "tide", tide.IsFinaleTide ? 0.6 : 0.8);
         await ShowBannerAsync(tide.IsFinaleTide ? $"THE {sc.FinaleName.ToUpperInvariant()}" : sc.PhaseBanner,
             tide.IsFinaleTide ? $"{sc.Killer.She} hunts only you." : $"{sc.Killer.Name}'s turn", Art.Danger);
 

@@ -10,13 +10,21 @@ public sealed record LogEntry(int Round, LogKind Kind, string Text);
 
 public enum DieFace { Blank, Partial, Success }
 
-/// <summary>A Horror roll. Faces: 1-2 blank, 3-4 partial (the cards icon), 5-6 success (the star).
-/// Converted = how many partials were turned into successes by discarding 2 cards each.</summary>
-public sealed record DiceRoll(string Label, IReadOnlyList<int> Values, int Threshold, int Successes, int Converted = 0)
+/// <summary>
+/// A Horror roll. Faces: 1-2 blank; 3 shows two cards and 4 shows one card (partials: discard that many cards
+/// to make the die a success); 5-6 a star (success). ConvertedDice = indices of dice bought with cards.
+/// </summary>
+public sealed record DiceRoll(string Label, IReadOnlyList<int> Values, int Threshold, int Successes, IReadOnlyList<int>? ConvertedDice = null)
 {
     public static DieFace Face(int value) => value >= 5 ? DieFace.Success : value >= 3 ? DieFace.Partial : DieFace.Blank;
+
+    /// <summary>Cards to discard to turn this face into a success: 2 for a 3, 1 for a 4, 0 if it can't be converted.</summary>
+    public static int CardsFor(int value) => value switch { 3 => 2, 4 => 1, _ => 0 };
+
     public int Stars => Values.Count(v => Face(v) == DieFace.Success);
     public int Partials => Values.Count(v => Face(v) == DieFace.Partial);
+    public int Converted => ConvertedDice?.Count ?? 0;
+    public bool IsConverted(int index) => ConvertedDice?.Contains(index) == true;
 }
 
 /// <summary>A roll waiting for the player to decide whether to discard cards to convert partials.
@@ -79,7 +87,7 @@ public sealed class Game
     public const int MaxDread = 8;
 
     public const int FinaleHealthBonus = 3;
-    public const int HandLimit = 4;
+    public const int HandLimit = 7;
     public const int MarketSize = 5;
     /// <summary>Time gained by discarding a card from your hand.</summary>
     public const int DiscardRefund = 1;
@@ -171,11 +179,10 @@ public sealed class Game
 
     public bool IsOver => Phase != Phase.SurvivorTurn;
     public bool TidewifeHere => TidewifeLocation == SurvivorLocation;
-    public bool TidewifeNear => TidewifeHere || Board.AreAdjacent(TidewifeLocation, SurvivorLocation);
+    public bool TidewifeNear => TidewifeHere || (Board.AreAdjacent(TidewifeLocation, SurvivorLocation) && !IsLocked(TidewifeLocation, SurvivorLocation));
 
     /// <summary>A star (5 or 6) is a success. A 3 or 4 is a partial: discard 2 cards from your hand to make it a success.</summary>
     public int SuccessThreshold => 5;
-    public const int CardsPerConversion = 2;
 
     /// <summary>A Horror roll waiting on the player's choice to convert partials. No other action is allowed meanwhile.</summary>
     public PendingRoll? Pending { get; private set; }
@@ -230,9 +237,9 @@ public sealed class Game
         Difficulty = difficulty;
         (TimePerRound, SurvivorMaxHealth, TidewifeStartHealth) = difficulty switch
         {
-            Difficulty.Easy => (5, 6, 14),
-            Difficulty.Hard => (4, 5, 17),
-            _ => (5, 5, 16)
+            Difficulty.Easy => (5, 6, 16),
+            Difficulty.Hard => (4, 5, 20),
+            _ => (5, 5, 19)
         };
         TidewifeStartHealth += Scenario.Killer.HealthBonus;
         Health = SurvivorMaxHealth;
@@ -390,17 +397,97 @@ public sealed class Game
         }
     }
 
+    // ------------------------------------------------------------------ doors, keys and vehicles
+
+    private readonly HashSet<(int, int)> _unlocked = new();
+    private static (int, int) EdgeKey(int a, int b) => (Math.Min(a, b), Math.Max(a, b));
+
+    /// <summary>A door that is still locked. Nobody walks through it, the killer included, until you open it with a key.</summary>
+    public bool IsLocked(int a, int b) => Scenario.IsLockedEdge(a, b) && !_unlocked.Contains(EdgeKey(a, b));
+    public IEnumerable<(int A, int B)> LockedDoors => Scenario.LockedEdges.Where(e => IsLocked(e.A, e.B));
+    private bool CanPass(int a, int b) => !IsLocked(a, b);
+
+    public int Keys => _inventory.Count(i => i == ItemKind.Key);
+    public bool HasVehicle => Scenario.VehicleRange >= 2 && _inventory.Contains(ItemKind.Vehicle);
+
+    /// <summary>The route of your last walk, escort or drive, starting where you were. The UI animates along it.</summary>
+    public IReadOnlyList<int> LastRoute { get; private set; } = Array.Empty<int>();
+
+    /// <summary>
+    /// How you would get to <paramref name="to"/> in one move, excluding where you are now, or null if you can't.
+    /// On foot: one step, through a locked door only if you carry a key. With a vehicle: up to VehicleRange steps,
+    /// never through a locked door, and never driving through the killer's space (you can stop there).
+    /// </summary>
+    public List<int>? RouteTo(int to)
+    {
+        int from = SurvivorLocation;
+        if (to == from || to < 0 || to >= Board.Count) return null;
+        if (Board.AreAdjacent(from, to))
+            return !IsLocked(from, to) || Keys > 0 ? new List<int> { to } : null;
+        if (!HasVehicle) return null;
+        // Breadth-first over open roads, not passing through the killer.
+        var prev = new int[Board.Count];
+        var depth = new int[Board.Count];
+        Array.Fill(prev, -1);
+        var seen = new bool[Board.Count];
+        var q = new Queue<int>();
+        q.Enqueue(from);
+        seen[from] = true;
+        while (q.Count > 0)
+        {
+            int c = q.Dequeue();
+            if (depth[c] >= Scenario.VehicleRange) continue;
+            if (c != from && c == TidewifeLocation) continue; // can stop on her, not drive through her
+            foreach (int n in Board.Neighbours(c))
+            {
+                if (seen[n] || !CanPass(c, n)) continue;
+                seen[n] = true;
+                prev[n] = c;
+                depth[n] = depth[c] + 1;
+                if (n == to)
+                {
+                    var path = new List<int>();
+                    for (int p = to; p != from; p = prev[p]) path.Add(p);
+                    path.Reverse();
+                    return path;
+                }
+                q.Enqueue(n);
+            }
+        }
+        return null;
+    }
+
+    /// <summary>Follow a route: open a locked door on the way with a key, and remember it for the animation.</summary>
+    private void Travel(List<int> route)
+    {
+        int from = SurvivorLocation;
+        if (route.Count == 1 && IsLocked(from, route[0]))
+        {
+            _inventory.Remove(ItemKind.Key);
+            _unlocked.Add(EdgeKey(from, route[0]));
+            Write(LogKind.Good, $"You unlock the door between the {Name(from)} and the {Name(route[0])} with the {Scenario.KeyName}. It stays open.");
+        }
+        var full = new List<int> { from };
+        full.AddRange(route);
+        LastRoute = full;
+        SurvivorLocation = route[^1];
+    }
+
+    private string MoveWord(List<int> route) =>
+        route.Count > 1 ? $"{Scenario.VehicleVerb} the {Scenario.VehicleName?.ToLowerInvariant()}" : "walk";
+
     // ------------------------------------------------------------------ movement
 
     public bool CanMove(int to) =>
-        Acting && Board.AreAdjacent(SurvivorLocation, to) && (MoveTokens > 0 || Time >= CostMove);
+        Acting && (MoveTokens > 0 || Time >= CostMove) && RouteTo(to) is not null;
 
     public bool Move(int to)
     {
         if (!CanMove(to)) return false;
+        var route = RouteTo(to)!;
         if (MoveTokens > 0) MoveTokens--; else Spend(CostMove);
-        SurvivorLocation = to;
-        Write(LogKind.Info, $"You walk to the {Name(to)}.");
+        Travel(route);
+        Write(LogKind.Info, route.Count > 1 ? $"You {MoveWord(route)} to the {Name(to)}." : $"You walk to the {Name(to)}.");
         return true;
     }
 
@@ -408,19 +495,22 @@ public sealed class Game
     public int EscortCost => CostEscort + (SpecialVictimAt == SurvivorLocation && SpecialVictimKind == EventKind.Wounded ? 1 : 0);
 
     public bool CanEscort(int to) =>
-        Acting && !InFinale && Board.AreAdjacent(SurvivorLocation, to) && _villagers[SurvivorLocation] > 0
-        && (EscortTokens > 0 || Time >= EscortCost);
+        Acting && !InFinale && _villagers[SurvivorLocation] > 0
+        && (EscortTokens > 0 || Time >= EscortCost) && RouteTo(to) is not null;
 
     public bool Escort(int to)
     {
         if (!CanEscort(to)) return false;
+        var route = RouteTo(to)!;
         if (EscortTokens > 0) EscortTokens--; else Spend(EscortCost);
         int from = SurvivorLocation;
         int count = Math.Min(EscortCapacity, _villagers[from]);
         bool special = SpecialVictimAt == from; // the special victim always comes with you
         _villagers[from] -= count;
-        SurvivorLocation = to;
-        Write(LogKind.Info, $"You lead {Plural(count, Scenario.Victim, Scenario.Victims)} to the {Name(to)}.");
+        Travel(route);
+        Write(LogKind.Info, route.Count > 1
+            ? $"You {MoveWord(route)} {Plural(count, Scenario.Victim, Scenario.Victims)} to the {Name(to)}."
+            : $"You lead {Plural(count, Scenario.Victim, Scenario.Victims)} to the {Name(to)}.");
         ArriveVillagers(to, count, special);
         return true;
     }
@@ -481,7 +571,15 @@ public sealed class Game
     /// <summary>Resolve a roll now, or, if partials could be converted to something useful, wait for the player.</summary>
     private void Offer(DiceRoll roll, int usefulSuccesses, string purpose, Action<int> resolve)
     {
-        int max = Math.Min(Math.Min(roll.Partials, _hand.Count / CardsPerConversion), Math.Max(0, usefulSuccesses - roll.Successes));
+        // How many partials could you actually afford, cheapest first, and how many would matter?
+        int affordable = 0, cards = _hand.Count;
+        foreach (int cost in roll.Values.Select(DiceRoll.CardsFor).Where(c => c > 0).OrderBy(c => c))
+        {
+            if (cost > cards) break;
+            cards -= cost;
+            affordable++;
+        }
+        int max = Math.Min(affordable, Math.Max(0, usefulSuccesses - roll.Successes));
         if (max <= 0)
         {
             resolve(roll.Successes);
@@ -489,19 +587,24 @@ public sealed class Game
         }
         Pending = new PendingRoll(roll, max, purpose);
         _resolvePending = resolve;
-        Write(LogKind.Info, $"{roll.Label}: {Plural(roll.Partials, "partial", "partials")} (3 or 4). Discard {CardsPerConversion} cards to turn each into a success.");
+        Write(LogKind.Info, $"{roll.Label}: {Plural(roll.Partials, "partial", "partials")}. Discard the cards shown on a die (2 for a 3, 1 for a 4) to make it a success.");
     }
 
-    /// <summary>Convert partials by discarding cards from your hand (2 per partial), then resolve the roll.
-    /// Pass no cards to keep the roll as it is. Discarded starting cards are gone; others go to the discard pile.</summary>
-    public bool ConvertPartials(IReadOnlyCollection<int> handIndices)
+    /// <summary>
+    /// Convert the chosen partial dice by discarding exactly the cards they show (2 for a 3, 1 for a 4), then resolve the roll.
+    /// Pass no dice and no cards to keep the roll as it is. Discarded starting cards are gone; others go to the discard pile.
+    /// </summary>
+    public bool ConvertPartials(IReadOnlyCollection<int> dieIndices, IReadOnlyCollection<int> handIndices)
     {
         if (Pending is not { } pending || _resolvePending is null) return false;
+        var dice = dieIndices.Distinct().ToList();
         var picks = handIndices.Distinct().ToList();
-        if (picks.Count % CardsPerConversion != 0 || picks.Count / CardsPerConversion > pending.MaxConversions
-            || picks.Any(i => i < 0 || i >= _hand.Count)) return false;
+        if (dice.Count > pending.MaxConversions) return false;
+        if (dice.Any(d => d < 0 || d >= pending.Roll.Values.Count || DiceRoll.CardsFor(pending.Roll.Values[d]) == 0)) return false;
+        if (picks.Count != dice.Sum(d => DiceRoll.CardsFor(pending.Roll.Values[d]))) return false;
+        if (picks.Any(i => i < 0 || i >= _hand.Count)) return false;
 
-        int converted = picks.Count / CardsPerConversion;
+        int converted = dice.Count;
         var names = new List<string>();
         foreach (int i in picks.OrderByDescending(i => i))
         {
@@ -510,7 +613,7 @@ public sealed class Game
             if (!ActionCards.IsStarter(card.Effect)) _actionDiscard.Add(card);
             names.Add(card.Name);
         }
-        var roll = pending.Roll with { Successes = pending.Roll.Successes + converted, Converted = converted };
+        var roll = pending.Roll with { Successes = pending.Roll.Successes + converted, ConvertedDice = dice.OrderBy(d => d).ToList() };
         LastRoll = roll;
         var resolve = _resolvePending;
         Pending = null;
@@ -661,7 +764,7 @@ public sealed class Game
                 break;
             case CardEffect.Lure:
             {
-                var path = Board.Path(TidewifeLocation, SurvivorLocation);
+                var path = Board.Path(TidewifeLocation, SurvivorLocation, null, CanPass);
                 if (path is { Count: > 0 })
                 {
                     TidewifeLocation = path[0];
@@ -674,6 +777,26 @@ public sealed class Game
     }
 
     // ------------------------------------------------------------------ items
+
+    /// <summary>Why a one-use item can't be used right now, in a few words, or null if it can (or isn't one-use).</summary>
+    public string? UseBlockedReason(int inventoryIndex)
+    {
+        if (inventoryIndex < 0 || inventoryIndex >= _inventory.Count) return null;
+        var kind = _inventory[inventoryIndex];
+        if (!Items.All[kind].Consumable) return null;
+        if (IsOver) return "the night is over";
+        if (AwaitingStartPick) return "choose your cards first";
+        if (Pending is not null) return "finish your roll first";
+        string killer = Scenario.Killer.ShortName;
+        return kind switch
+        {
+            ItemKind.FlareGun or ItemKind.BlessedSalt when !TidewifeNear => $"needs {killer} here or next door",
+            ItemKind.Bandages when Health >= SurvivorMaxHealth => "you're at full health",
+            ItemKind.IronNails when TidewifeHere => $"not with {killer} here",
+            ItemKind.IronNails when Barricaded => "door already barred",
+            _ => null
+        };
+    }
 
     public bool CanUse(int inventoryIndex)
     {
@@ -888,7 +1011,7 @@ public sealed class Game
                 for (int i = 0; i < Board.Count; i++)
                 {
                     if (_villagers[i] == 0) continue;
-                    int d = Board.Distance(SurvivorLocation, i, null);
+                    int d = Board.Distance(SurvivorLocation, i, null, CanPass);
                     if (d < bestDist) { best = i; bestDist = d; }
                 }
                 if (best < 0) break;
@@ -940,7 +1063,7 @@ public sealed class Game
                 for (int i = 0; i < Board.Count; i++)
                 {
                     if (Board.Locations[i].IsSanctuary || i == TidewifeLocation) continue;
-                    int d = Board.Distance(TidewifeLocation, i, null);
+                    int d = Board.Distance(TidewifeLocation, i, null, CanPass);
                     if (d != int.MaxValue && d > farDist) { far = i; farDist = d; }
                 }
                 if (far < 0) break;
@@ -1122,7 +1245,7 @@ public sealed class Game
         for (int i = 0; i < Board.Count; i++)
         {
             if (_villagers[i] == 0) continue;
-            int d = Board.Distance(TidewifeLocation, i, blocked);
+            int d = Board.Distance(TidewifeLocation, i, blocked, CanPass);
             if (d == int.MaxValue) continue;
             if (d < bestDist || (d == bestDist && _villagers[i] > _villagers[best]))
             {
@@ -1140,7 +1263,7 @@ public sealed class Game
         {
             if (TidewifeLocation == SurvivorLocation) break;
             if (!huntingSurvivor && _villagers[TidewifeLocation] > 0) break;
-            var path = Board.Path(TidewifeLocation, target, blocked);
+            var path = Board.Path(TidewifeLocation, target, blocked, CanPass);
             if (path is null || path.Count == 0)
             {
                 if (blocked.HasValue && Board.AreAdjacent(TidewifeLocation, blocked.Value))

@@ -10,7 +10,8 @@ using Line = System.Windows.Shapes.Line;
 
 namespace SoleSurvivor.App;
 
-public enum Weather { Fog, Snow, Rain }
+/// <summary>Moving ambience over the board. Motes: dream-dust drifting up. Static: TV interference. Embers: candlelit dust.</summary>
+public enum Weather { Fog, Snow, Rain, Motes, Static, Embers }
 
 /// <summary>Colours and ambience for one scenario's board.</summary>
 /// <param name="Trail">Killer footprints and ripples.</param>
@@ -18,7 +19,7 @@ public sealed record Theme(
     string LandTop, string LandBottom, string Tufts, string Stones,
     string RoadOuter, string RoadInner, string RoadDash,
     Color Trail, Color KillerGlow, Color Accent,
-    bool HasSea, Weather Weather, string Board);
+    bool HasSea, Weather Weather, string Board, bool Indoor = false);
 
 /// <summary>Art for every scenario: themes, location icons, figures, weather.</summary>
 internal static partial class Art
@@ -28,6 +29,15 @@ internal static partial class Art
         "whitepine" => new("#7C8A99", "#5E6B7A", "#9AA8B6", "#6A7480",
                            "#55606C", "#A7B4C0", "#8796A4",
                            C("#CFE8FF"), C("#BFE6FF"), C("#9FD0F0"), false, Weather.Snow, "#3E4A57"),
+        "larkspur" => new("#2A2440", "#1C1830", "#3A3358", "#322C48",
+                          "#24202E", "#3E3A4A", "#C9B86A",
+                          C("#C8A8FF"), C("#E8D8FF"), C("#C8A8FF"), false, Weather.Motes, "#16122A"),
+        "kestrel" => new("#3A3024", "#251E17", "#4A3E2A", "#4A4032",
+                         "#1E1E20", "#34343A", "#E8C26A",
+                         C("#9FE8FF"), C("#BFF4FF"), C("#9FE8FF"), false, Weather.Static, "#1A1712"),
+        "ashgrove" => new("#3A2620", "#26170F", "#4A3024", "#2E1C14",
+                          "#3A1418", "#6A1E24", "#C9A04A",
+                          C("#E8B060"), C("#F0C070"), C("#E8B060"), false, Weather.Embers, "#1A0F0C", Indoor: true),
         "stagnes" => new("#1D2622", "#151C19", "#2A3A30", "#2C3330",
                          "#2E2B26", "#6E6A60", "#5A574F",
                          C("#B9C9A0"), C("#C8553D"), C("#B9C9A0"), false, Weather.Rain, "#141A18"),
@@ -52,6 +62,7 @@ internal static partial class Art
                 0 => Gatehouse(), 1 => Courtyard(), 2 => GothicChapel(), 3 => Ward(false),
                 4 => Ward(true), 5 => RecordsOffice(), 6 => BoilerHouse(), 7 => Morgue(), _ => new Canvas()
             },
+            "larkspur" or "kestrel" or "ashgrove" => ExtraIcon(scenarioId, id),
             _ => GallowmouthIcon(id)
         };
         icon.Width = IconWidth;
@@ -64,6 +75,9 @@ internal static partial class Art
     {
         "whitepine" => Dana(),
         "stagnes" => Eli(),
+        "larkspur" => Maya(),
+        "kestrel" => Ruth(),
+        "ashgrove" => Clara(),
         _ => Wren()
     };
 
@@ -71,6 +85,9 @@ internal static partial class Art
     {
         "whitepine" => HollowStag(),
         "stagnes" => Matron(),
+        "larkspur" => LullabyMan(),
+        "kestrel" => Presenter(),
+        "ashgrove" => Curator(),
         _ => TidewifeFigure()
     };
 
@@ -473,5 +490,144 @@ internal static partial class Art
         drift.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(-30, 30, new Duration(TimeSpan.FromSeconds(11)))
         { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut } });
         layer.Children.Add(band);
+    }
+
+    // ================================================================== new weather
+
+    /// <summary>Larkspur Lane: dream-dust motes drifting slowly upward, glowing and fading.</summary>
+    public static void AddMotes(Canvas layer, double width, double height)
+    {
+        var rng = new Random(41);
+        Color[] tints = [C("#E8D8FF"), C("#C8A8FF"), C("#FFE8F4"), C("#BFE6FF")];
+        for (int i = 0; i < 70; i++)
+        {
+            double size = 1.5 + rng.NextDouble() * 3;
+            var tint = tints[rng.Next(tints.Length)];
+            var brush = new RadialGradientBrush(Color.FromArgb(230, tint.R, tint.G, tint.B), Color.FromArgb(0, tint.R, tint.G, tint.B));
+            brush.Freeze();
+            var e = new Ellipse { Width = size * 2.4, Height = size * 2.4, Fill = brush, IsHitTestVisible = false };
+            var move = new TranslateTransform();
+            e.RenderTransform = move;
+            Canvas.SetLeft(e, rng.NextDouble() * width);
+            Canvas.SetTop(e, height * (0.3 + rng.NextDouble() * 0.75));
+            double seconds = 10 + rng.NextDouble() * 12;
+            var begin = TimeSpan.FromSeconds(-rng.NextDouble() * seconds);
+            move.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(0, -height * 0.6, new Duration(TimeSpan.FromSeconds(seconds)))
+            { RepeatBehavior = RepeatBehavior.Forever, BeginTime = begin });
+            move.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(-14, 14, new Duration(TimeSpan.FromSeconds(3 + rng.NextDouble() * 3)))
+            { RepeatBehavior = RepeatBehavior.Forever, AutoReverse = true, EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut } });
+            e.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, 0.9, new Duration(TimeSpan.FromSeconds(seconds / 2)))
+            { RepeatBehavior = RepeatBehavior.Forever, AutoReverse = true, BeginTime = begin });
+            layer.Children.Add(e);
+        }
+        // A slow lilac haze that breathes in and out, like falling asleep.
+        var haze = new Rectangle { Width = width, Height = height, IsHitTestVisible = false, Fill = Hex("#2A1A4A") };
+        haze.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, 0.22, new Duration(TimeSpan.FromSeconds(6)))
+        { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut } });
+        layer.Children.Add(haze);
+    }
+
+    /// <summary>Kestrel Motel: faint scanlines, a rolling interference band, twinkling static, and the odd picture jump.</summary>
+    public static void AddStatic(Canvas layer, double width, double height)
+    {
+        var rng = new Random(53);
+        var lines = new System.Text.StringBuilder();
+        for (double y = 0; y < height; y += 3) lines.Append($"M0,{y:F0} H{width:F0} ");
+        var scan = P(lines.ToString(), "none", "#000000", 1);
+        scan.Opacity = 0.12;
+        scan.IsHitTestVisible = false;
+        layer.Children.Add(scan);
+
+        var bandBrush = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(0, 1) };
+        bandBrush.GradientStops.Add(new GradientStop(Color.FromArgb(0, 200, 240, 255), 0));
+        bandBrush.GradientStops.Add(new GradientStop(Color.FromArgb(40, 200, 240, 255), 0.5));
+        bandBrush.GradientStops.Add(new GradientStop(Color.FromArgb(0, 200, 240, 255), 1));
+        bandBrush.Freeze();
+        var band = new Rectangle { Width = width, Height = 70, Fill = bandBrush, IsHitTestVisible = false };
+        var roll = new TranslateTransform();
+        band.RenderTransform = roll;
+        roll.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(-80, height + 10, new Duration(TimeSpan.FromSeconds(7))) { RepeatBehavior = RepeatBehavior.Forever });
+        layer.Children.Add(band);
+
+        for (int i = 0; i < 80; i++)
+        {
+            var speck = new Rectangle { Width = 1.5 + rng.NextDouble() * 2, Height = 1.2, Fill = Hex(rng.Next(2) == 0 ? "#E8FFFF" : "#8AB8C4"), IsHitTestVisible = false, Opacity = 0 };
+            Canvas.SetLeft(speck, rng.NextDouble() * width);
+            Canvas.SetTop(speck, rng.NextDouble() * height);
+            var frames = new DoubleAnimationUsingKeyFrames { Duration = new Duration(TimeSpan.FromSeconds(0.6 + rng.NextDouble() * 1.4)), RepeatBehavior = RepeatBehavior.Forever, BeginTime = TimeSpan.FromSeconds(rng.NextDouble() * 2) };
+            frames.KeyFrames.Add(new DiscreteDoubleKeyFrame(0, KeyTime.FromPercent(0)));
+            frames.KeyFrames.Add(new DiscreteDoubleKeyFrame(0.8, KeyTime.FromPercent(0.1)));
+            frames.KeyFrames.Add(new DiscreteDoubleKeyFrame(0, KeyTime.FromPercent(0.2)));
+            speck.BeginAnimation(UIElement.OpacityProperty, frames);
+            layer.Children.Add(speck);
+        }
+
+        // Every 11 seconds the picture flickers.
+        var flicker = new Rectangle { Width = width, Height = height, Fill = Hex("#C8F0FF"), IsHitTestVisible = false, Opacity = 0 };
+        var f = new DoubleAnimationUsingKeyFrames { Duration = new Duration(TimeSpan.FromSeconds(11)), RepeatBehavior = RepeatBehavior.Forever };
+        f.KeyFrames.Add(new DiscreteDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+        f.KeyFrames.Add(new DiscreteDoubleKeyFrame(0.12, KeyTime.FromTimeSpan(TimeSpan.FromSeconds(7.0))));
+        f.KeyFrames.Add(new DiscreteDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromSeconds(7.06))));
+        f.KeyFrames.Add(new DiscreteDoubleKeyFrame(0.08, KeyTime.FromTimeSpan(TimeSpan.FromSeconds(7.14))));
+        f.KeyFrames.Add(new DiscreteDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromSeconds(7.2))));
+        flicker.BeginAnimation(UIElement.OpacityProperty, f);
+        layer.Children.Add(flicker);
+    }
+
+    /// <summary>Ashgrove House: dust drifting in candlelight, and the whole house flickering as the candles gutter.</summary>
+    public static void AddEmbers(Canvas layer, double width, double height)
+    {
+        var rng = new Random(61);
+        var dust = new SolidColorBrush(Color.FromArgb(200, 255, 220, 160));
+        dust.Freeze();
+        for (int i = 0; i < 90; i++)
+        {
+            double size = 0.8 + rng.NextDouble() * 1.6;
+            var e = new Ellipse { Width = size, Height = size, Fill = dust, IsHitTestVisible = false };
+            var move = new TranslateTransform();
+            e.RenderTransform = move;
+            Canvas.SetLeft(e, rng.NextDouble() * width);
+            Canvas.SetTop(e, rng.NextDouble() * height);
+            double seconds = 8 + rng.NextDouble() * 10;
+            move.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(-20, 20, new Duration(TimeSpan.FromSeconds(seconds)))
+            { RepeatBehavior = RepeatBehavior.Forever, AutoReverse = true, EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut } });
+            move.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(-12, 16, new Duration(TimeSpan.FromSeconds(seconds * 0.7)))
+            { RepeatBehavior = RepeatBehavior.Forever, AutoReverse = true, EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut } });
+            e.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0.1, 0.8, new Duration(TimeSpan.FromSeconds(1.5 + rng.NextDouble() * 3)))
+            { RepeatBehavior = RepeatBehavior.Forever, AutoReverse = true });
+            layer.Children.Add(e);
+        }
+        var warm = new Rectangle { Width = width, Height = height, Fill = Hex("#FF9A3A"), IsHitTestVisible = false, Opacity = 0.04 };
+        var f = new DoubleAnimationUsingKeyFrames { Duration = new Duration(TimeSpan.FromSeconds(2.3)), RepeatBehavior = RepeatBehavior.Forever };
+        foreach (var (t, v) in new[] { (0.0, 0.04), (0.3, 0.07), (0.5, 0.03), (0.9, 0.06), (1.4, 0.02), (1.8, 0.05), (2.3, 0.04) })
+            f.KeyFrames.Add(new LinearDoubleKeyFrame(v, KeyTime.FromTimeSpan(TimeSpan.FromSeconds(t))));
+        warm.BeginAnimation(UIElement.OpacityProperty, f);
+        layer.Children.Add(warm);
+    }
+
+    /// <summary>A padlock badge for a door on the map: gold and shut while locked, faint and open once unlocked. 24 x 24.</summary>
+    public static Canvas Padlock(bool locked)
+    {
+        var c = Group(24, 24,
+            P("M1,12 a11,11 0 1 1 22,0 a11,11 0 1 1 -22,0 Z", "#1A1210", locked ? "#E8C26A" : "#6A6A5A", 1.5),
+            P("M7,11 h10 v7 h-10 Z", locked ? "#E8C26A" : "#8A8A7A"),
+            P(locked ? "M8.8,11 v-2.6 a3.2,3.2 0 0 1 6.4,0 v2.6" : "M8.8,11 v-2.6 a3.2,3.2 0 0 1 6.4,0 v-1", "none", locked ? "#E8C26A" : "#8A8A7A", 1.4),
+            P("M12,13.6 v2.2", "none", "#1A1210", 1.2));
+        if (locked)
+            c.Effect = new DropShadowEffect { Color = C("#E8C26A"), BlurRadius = 8, ShadowDepth = 0, Opacity = 0.6 };
+        else
+            c.Opacity = 0.55;
+        return c;
+    }
+
+    /// <summary>A light that blinks on and off (the broadcast tower's warning light).</summary>
+    public static void AddBlink(Canvas layer, double x, double y, Color colour, double seconds)
+    {
+        var g = Glow(x, y, 9, colour, 0.95);
+        var frames = new DoubleAnimationUsingKeyFrames { Duration = new Duration(TimeSpan.FromSeconds(seconds)), RepeatBehavior = RepeatBehavior.Forever };
+        frames.KeyFrames.Add(new DiscreteDoubleKeyFrame(1, KeyTime.FromPercent(0)));
+        frames.KeyFrames.Add(new DiscreteDoubleKeyFrame(0, KeyTime.FromPercent(0.5)));
+        g.BeginAnimation(UIElement.OpacityProperty, frames);
+        layer.Children.Add(g);
     }
 }

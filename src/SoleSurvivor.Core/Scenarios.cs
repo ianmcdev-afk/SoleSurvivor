@@ -64,6 +64,22 @@ public sealed class ScenarioDef
     /// <summary>Dread at the start of the night (Horror track). 1 = Uneasy with room to spare; 2 = one loss from Afraid.</summary>
     public int StartDread { get; init; } = 1;
 
+    // Indoor / special map features
+    /// <summary>Doors that start locked. Nobody walks through a locked door (the killer included) until you open it with a key.</summary>
+    public (int A, int B)[] LockedEdges { get; init; } = [];
+    /// <summary>Name of the key item (needed if there are locked doors), e.g. "Room Key".</summary>
+    public string? KeyName { get; init; }
+    /// <summary>Name of the vehicle item, e.g. "Bicycle". Null = no vehicle in this scenario.</summary>
+    public string? VehicleName { get; init; }
+    /// <summary>How many spaces one move covers with the vehicle.</summary>
+    public int VehicleRange { get; init; }
+    /// <summary>Verb for moving with the vehicle: "cycle", "drive".</summary>
+    public string VehicleVerb { get; init; } = "drive";
+    /// <summary>Background loop and stinger names; defaults are amb_{Id}.</summary>
+    public string VehicleSound { get; init; } = "drive_car";
+
+    public bool IsLockedEdge(int a, int b) => LockedEdges.Any(e => (e.A == a && e.B == b) || (e.A == b && e.B == a));
+
     /// <summary>The killer board's Bloodlust track, bottom (start) to top. Kills move the marker up.</summary>
     public required BloodlustLevel[] BloodlustTrack { get; init; }
 
@@ -108,7 +124,20 @@ public sealed class ScenarioDef
     }
 
     private Dictionary<ItemKind, ItemDef>? _items;
-    public IReadOnlyDictionary<ItemKind, ItemDef> Items => _items ??= new Dictionary<ItemKind, ItemDef>
+    public IReadOnlyDictionary<ItemKind, ItemDef> Items => _items ??= BuildItems();
+
+    private Dictionary<ItemKind, ItemDef> BuildItems()
+    {
+        var items = BaseItems();
+        if (KeyName is not null)
+            items[ItemKind.Key] = new(ItemKind.Key, KeyName, Fill("Opens one locked door. Walk through it to unlock it for good (for {her} too)."), false);
+        if (VehicleName is not null)
+            items[ItemKind.Vehicle] = new(ItemKind.Vehicle, VehicleName,
+                Fill($"Walk or escort up to {VehicleRange} spaces in one move. Not through locked doors, and not past {{her}}."), false);
+        return items;
+    }
+
+    private Dictionary<ItemKind, ItemDef> BaseItems() => new()
     {
         [ItemKind.BoatHook] = new(ItemKind.BoatHook, ItemNames[0], "+1 die when you fight.", false, FightBonus: 1),
         [ItemKind.GuttingKnife] = new(ItemKind.GuttingKnife, ItemNames[1], "+1 die when you fight.", false, FightBonus: 1),
@@ -142,6 +171,52 @@ public sealed class ScenarioDef
     public IReadOnlyList<ActionCardDef> ActionCards => _actions ??= Core.ActionCards.Templates.Select(c => c with { Text = Fill(c.Text) }).ToArray();
     public IReadOnlyList<ActionCardDef> StarterCards => _starters ??= Core.ActionCards.StarterTemplates.Select(c => c with { Text = Fill(c.Text) }).ToArray();
 
+    /// <summary>Starting from the sanctuary, open doors with keys found in reachable places: every location must end up
+    /// reachable, and every victim must be able to get home without passing a locked door.</summary>
+    private void CheckKeysReachEverything()
+    {
+        var open = new HashSet<(int, int)>();
+        bool Pass(int a, int b) => !IsLockedEdge(a, b) || open.Contains((Math.Min(a, b), Math.Max(a, b)));
+        HashSet<int> Reach()
+        {
+            var seen = new HashSet<int> { SanctuaryId };
+            var q = new Queue<int>(seen);
+            while (q.Count > 0)
+            {
+                int c = q.Dequeue();
+                foreach (int n in Adjacency[c])
+                    if (Pass(c, n) && seen.Add(n)) q.Enqueue(n);
+            }
+            return seen;
+        }
+        var reach = Reach();
+        int keysUsed = 0;
+        while (true)
+        {
+            int keys = reach.Sum(i => Locations[i].Stash.Count(k => k == ItemKind.Key)) - keysUsed;
+            var door = LockedEdges.Select(e => (Math.Min(e.A, e.B), Math.Max(e.A, e.B)))
+                .FirstOrDefault(e => !open.Contains(e) && (reach.Contains(e.Item1) || reach.Contains(e.Item2)));
+            if (keys <= 0 || door == default) break;
+            open.Add(door);
+            keysUsed++;
+            reach = Reach();
+        }
+        if (reach.Count != Locations.Length) throw new InvalidOperationException($"{Id}: not enough reachable keys to open every area");
+        foreach (var loc in Locations.Where(l => l.StartVillagers > 0))
+        {
+            // Victims start outside locked areas, so the starting map always has a way home.
+            var seen = new HashSet<int> { loc.Id };
+            var q = new Queue<int>(seen);
+            while (q.Count > 0)
+            {
+                int c = q.Dequeue();
+                foreach (int n in Adjacency[c])
+                    if (!IsLockedEdge(c, n) && seen.Add(n)) q.Enqueue(n);
+            }
+            if (!seen.Contains(SanctuaryId)) throw new InvalidOperationException($"{Id}: victims at {loc.Name} start behind a locked door");
+        }
+    }
+
     /// <summary>Checks the scenario is well formed. Throws with a clear message if not.</summary>
     public void Validate()
     {
@@ -155,6 +230,11 @@ public sealed class ScenarioDef
         if (ItemNames.Length != 8) throw new InvalidOperationException($"{Id}: 8 item names");
         if (TideNames.Length != Core.TideCards.Mechanics.Length) throw new InvalidOperationException($"{Id}: {Core.TideCards.Mechanics.Length} tide names");
         if (EventNames.Length != Core.EventCards.Templates.Length) throw new InvalidOperationException($"{Id}: {Core.EventCards.Templates.Length} event names");
+        foreach (var (a, b) in LockedEdges)
+            if (!Edges.Any(e => (e.A == a && e.B == b) || (e.A == b && e.B == a))) throw new InvalidOperationException($"{Id}: locked door {a}-{b} is not a road");
+        if (LockedEdges.Length > 0 && KeyName is null) throw new InvalidOperationException($"{Id}: locked doors but no key name");
+        if (Locations.Any(l => l.Stash.Contains(ItemKind.Vehicle)) && (VehicleName is null || VehicleRange < 2)) throw new InvalidOperationException($"{Id}: vehicle needs a name and range 2+");
+        CheckKeysReachEverything();
         if (BloodlustTrack.Length < 2 || BloodlustTrack.Any(l => l.Move < 1 || l.Attack < 1)) throw new InvalidOperationException($"{Id}: bad Bloodlust track");
         foreach (var (a, b) in Edges)
             if (a == b || a < 0 || b < 0 || a >= Locations.Length || b >= Locations.Length) throw new InvalidOperationException($"{Id}: bad edge {a}-{b}");
@@ -182,7 +262,7 @@ public static class Scenarios
         _current = scenario;
     }
 
-    public static IReadOnlyList<ScenarioDef> All => [Gallowmouth, Whitepine, StAgnes];
+    public static IReadOnlyList<ScenarioDef> All => [Gallowmouth, Whitepine, StAgnes, Larkspur, Kestrel, Ashgrove];
 
     public static ScenarioDef ById(string? id) => All.FirstOrDefault(s => s.Id == id) ?? Gallowmouth;
 
@@ -493,6 +573,326 @@ public static class Scenarios
             ("Static", "Every old speaker in the building hisses at once."),
             ("Empty Wheelchair", "A wheelchair rolls down the corridor by itself."),
             ("Down in the Basement", "Pipes knock all the way down to the basement."),
+        ],
+    };
+
+    // ================================================================== Larkspur Lane (dream-stalker suburb)
+
+    public static ScenarioDef Larkspur { get; } = new()
+    {
+        Id = "larkspur",
+        Title = "Larkspur Lane",
+        Place = "Larkspur Lane",
+        Tagline = "Whatever you do, don't fall asleep.",
+        Blurb = "A quiet street where the teenagers have stopped sleeping. Those who drift off don't wake up. You've been awake for three nights, and you have a bicycle.",
+        Intro = "Larkspur Lane, the third night without sleep. Get the sleepers to the All-Night Diner, and silence the Lullaby Man.",
+        Survivor = new("Maya Castillo", "Maya", "Insomniac",
+            "Hasn't slept in three nights. Knows that's the only reason she's still alive."),
+        Killer = new("The Lullaby Man", "Lullaby Man", "He", "him",
+            "A porcelain moon for a face, a nightgown the colour of dust, and a voice like a music box winding down. He only comes when you close your eyes.", HealthBonus: 3),
+        Victim = "sleeper", Victims = "sleepers",
+        RoundWord = "dream",
+        DeckName = "Dream card",
+        PhaseBanner = "YOUR EYELIDS GROW HEAVY",
+        FinaleName = "Deep Sleep",
+        FinaleFlavour = "You can't stay awake any longer. The street melts like wax, and he is waiting.",
+        FinaleTakes = "The whole street falls into the dream",
+        FinaleBannerSub = "You've fallen asleep. Now he hunts only you.",
+        ClaimText = "sings {0} into a sleep they won't wake from",
+        MoveVerb = "strolls", LingerVerb = "hums to himself",
+        RiseText = "steps out of a wardrobe",
+        NobodyThere = "He tucks in empty beds, and fades.",
+        BarredRise = "The wardrobe door rattles, but the wedged chair holds.",
+        BarredDoor = "He knocks, softly, politely. The door stays shut.",
+        BarricadeText = "You jam a chair under the handle.",
+        LureText = "You hum his tune, badly.",
+        RepelText = "The alarm clock shrieks and he reels away, hands over his ears.",
+        RepelUse = "You set off the alarm clock; he flinches from the noise.",
+        WinText = "The music box winds down to silence. Larkspur Lane wakes up.",
+        LoseText = "Your eyes close. Somewhere, a music box starts to play.",
+        FogName = "Drowsiness",
+        Locations =
+        [
+            new(0, "All-Night Diner", "Neon, black coffee and a jukebox. Sleepers brought here stay awake, and safe.", 400, 490, false, true, 0, [ItemKind.FlareGun]),
+            new(1, "Your House", "Every light on. Your bike leans against the garage door.", 400, 318, false, false, 1, [ItemKind.Vehicle, ItemKind.Bandages]),
+            new(2, "Larkspur High", "Lockers hanging open. A school bell that rings at 3am.", 150, 385, false, false, 2, [ItemKind.BoatHook, ItemKind.Lantern]),
+            new(3, "Sleep Clinic", "Monitors beeping for patients who aren't there.", 650, 318, false, false, 2, [ItemKind.Bandages, ItemKind.BlessedSalt, ItemKind.Key]),
+            new(4, "Playground", "The swings move with no wind. A nursery rhyme drifts over the sandpit.", 150, 160, true, false, 1, [ItemKind.IronNails]),
+            new(5, "Neighbour's House", "A music box on the mantelpiece. It's already open.", 400, 128, false, false, 1, [ItemKind.GuttingKnife, ItemKind.Rope]),
+            new(6, "Drained Pool", "Cracked tiles, dead leaves, and a ladder down into the deep end.", 655, 140, true, false, 0, [ItemKind.BlessedSalt]),
+            new(7, "Old Cinema", "The projector runs a film of your street, tonight.", 655, 488, false, false, 1, [ItemKind.Lantern, ItemKind.FlareGun]),
+        ],
+        Edges = [(0, 1), (0, 2), (0, 7), (1, 2), (1, 3), (1, 5), (2, 4), (4, 5), (5, 6), (3, 6), (3, 7)],
+        LockedEdges = [(2, 4)],
+        KeyName = "Janitor's Key",
+        VehicleName = "Bicycle", VehicleRange = 2, VehicleVerb = "cycle", VehicleSound = "drive_bike",
+        SanctuaryId = 0,
+        KillerStart = 6,
+        SummonId = 5,
+        StartDread = 2,
+        BloodlustTrack =
+        [
+            new(1, 1),
+            new(1, 1, BloodlustEffect.DreadUp),
+            new(2, 1, BloodlustEffect.DreadUp),
+            new(2, 2, BloodlustEffect.DreadUp),
+            new(2, 2, BloodlustEffect.DreadUp),
+            new(2, 2, BloodlustEffect.Frenzy),
+            new(3, 2, BloodlustEffect.DreadUp),
+            new(3, 2, BloodlustEffect.DreadUp),
+            new(3, 3, BloodlustEffect.DreadUp),
+            new(3, 3, BloodlustEffect.DreadUp),
+            new(3, 3),
+        ],
+        ItemNames = ["Baseball Bat", "Kitchen Knife", "Flashlight", "Garden Hose", "Road Flare", "First-Aid Kit", "Alarm Clock", "Chair Wedge"],
+        EventNames =
+        [
+            ("Best Friend", "\"Maya, I'll keep you awake. I swear. Just don't leave me.\""),
+            ("Sleepwalker", "Eyes open, seeing nothing. She has to be guided every step."),
+            ("Black Coffee", "Bitter, scalding and wonderful."),
+            ("Dad's Toolbox", "Somebody left the garage open."),
+            ("You Remember", "It's a dream. Dreams have rules. You can break them."),
+            ("Caffeine Pills", "Your heart races. Sleep feels very far away."),
+            ("Tripwire", "Fishing line and an old cowbell, strung across the doorway."),
+            ("Slumber Party", "Five kids in sleeping bags, two streets over, all yawning."),
+            ("Microsleep", "You blink, and lose a minute. Where did it go?"),
+            ("Street Lights Out", "One by one, down the whole street."),
+            ("He Knows Your Name", "Sung softly, in the tune of a lullaby."),
+            ("Sweet Dreams", "Somebody on the next street stopped fighting it."),
+        ],
+        TideNames =
+        [
+            ("Goodnight Kiss", "A cold breath on a sleeping cheek."),
+            ("Counting Sheep", "One, two, three. He knows where every sleeper lies."),
+            ("Your Name, Sung", "Your name, to the tune of a lullaby, from right behind you."),
+            ("Bedtime Story", "\"Once upon a time, there were two little children...\""),
+            ("Heavy Eyelids", "Everything is soft and slow and far away."),
+            ("Sleepwalker", "A kid in pyjamas wanders out into the street."),
+            ("The Music Box", "Next door, the music box starts to play by itself."),
+            ("Sweet Dreams", "He's decided it's your turn."),
+            ("Dawn Chorus", "A bird sings. For a moment, you're wide awake."),
+            ("Hush Now", "A long finger presses to porcelain lips."),
+            ("Nightcap", "He is hungry tonight."),
+            ("Where the Children Sleep", "He steps out of the dark wherever the sleepers huddle."),
+            ("Night Light", "A sleeper stumbles out, looking for the light."),
+            ("Yawn", "The yawn comes from somewhere deep. You can't stop it."),
+            ("Lullaby", "He sits on the end of a bed and sings, and his cracks close."),
+            ("Pillow Fog", "The air is thick and soft as a pillow."),
+            ("Tuck In", "Softly, softly, closer and closer."),
+            ("Lights Out", "Somewhere a nursery rhyme starts again from the top."),
+        ],
+    };
+
+    // ================================================================== Kestrel Motel (cursed broadcast)
+
+    public static ScenarioDef Kestrel { get; } = new()
+    {
+        Id = "kestrel",
+        Title = "Kestrel Motel",
+        Place = "the Kestrel Motel",
+        Tagline = "Please stand by. Please stand by.",
+        Blurb = "A roadside motel on an empty highway, where every television picks up a channel that isn't there. You watched it. You have until sign-off. There's a station wagon at the drive-in.",
+        Intro = "The Kestrel Motel, the night the signal came. Get the guests to the Gas Station, and take the Presenter off the air.",
+        Survivor = new("Ruth Abernathy", "Ruth", "Local reporter",
+            "Came to cover a story about a pirate TV signal. Watched the broadcast. Has until sign-off."),
+        Killer = new("The Presenter", "Presenter", "He", "him",
+            "A tall man in a grey suit and a wide old tie, holding a studio microphone. Where his face should be there is only static, and sometimes, for a moment, your face.", HealthBonus: 2),
+        Victim = "guest", Victims = "guests",
+        RoundWord = "broadcast",
+        DeckName = "Signal card",
+        PhaseBanner = "EVERY SCREEN SWITCHES ON",
+        FinaleName = "Sign-Off",
+        FinaleFlavour = "Every screen at the Kestrel shows the same picture: you.",
+        FinaleTakes = "Every set in the motel switches on at once",
+        FinaleBannerSub = "The broadcast is ending. Now he hunts only you.",
+        ClaimText = "pulls {0} into the static",
+        MoveVerb = "walks", LingerVerb = "stands perfectly still",
+        RiseText = "flickers onto a screen nearby, then steps out of it",
+        NobodyThere = "The screen shows an empty room, then goes dark.",
+        BarredRise = "The set in your room hisses and rolls, but you pulled its plug.",
+        BarredDoor = "He knocks. The TV in your room hisses in time.",
+        BarricadeText = "You yank the aerial cable and chain the door.",
+        LureText = "You switch on a TV and turn up the volume.",
+        RepelText = "His picture warps and rolls around the magnet, and he backs away.",
+        RepelUse = "You shove the magnet at his screen; the picture smears and he staggers back.",
+        WinText = "The screen cracks, the picture shrinks to a white dot, and the Kestrel goes quiet.",
+        LoseText = "The picture fades in on a new face. Yours.",
+        FogName = "Interference",
+        Locations =
+        [
+            new(0, "Gas Station", "One working payphone and a sheriff on the way. Guests brought here are safe.", 400, 490, false, true, 0, [ItemKind.FlareGun]),
+            new(1, "Motel Office", "A bell on the desk, a wall of keys, and a TV playing to nobody.", 400, 318, false, false, 2, [ItemKind.Rope, ItemKind.Bandages]),
+            new(2, "Honeymoon Suite", "Heart-shaped bed, mirrored ceiling, and a TV that was off when you left.", 150, 385, false, false, 2, [ItemKind.GuttingKnife, ItemKind.BlessedSalt]),
+            new(3, "Back Rooms", "A row of cheap rooms. One door hangs open, snow on the screen, someone crying in the bathroom.", 650, 318, false, false, 1, [ItemKind.Bandages, ItemKind.Lantern]),
+            new(4, "Swimming Pool", "Green water, a rusty diving board and a deckchair facing the sky.", 150, 160, false, false, 1, [ItemKind.IronNails, ItemKind.BoatHook]),
+            new(5, "Laundromat", "A row of tumbling machines. In every round window, static.", 400, 128, false, false, 1, [ItemKind.Key, ItemKind.BlessedSalt]),
+            new(6, "Broadcast Tower", "Red lights blink at the top. The hum makes your teeth ache.", 655, 140, true, false, 0, [ItemKind.FlareGun]),
+            new(7, "Drive-In", "One car left in the lot. The giant screen plays the test card.", 655, 488, true, false, 1, [ItemKind.Vehicle, ItemKind.Key]),
+        ],
+        Edges = [(0, 1), (0, 2), (0, 7), (1, 2), (1, 3), (1, 5), (2, 4), (4, 5), (5, 6), (3, 6), (3, 7)],
+        LockedEdges = [(1, 2), (1, 3)],
+        KeyName = "Room Key",
+        VehicleName = "Station Wagon", VehicleRange = 3, VehicleVerb = "drive", VehicleSound = "drive_car",
+        SanctuaryId = 0,
+        KillerStart = 6,
+        SummonId = 6,
+        StartDread = 2,
+        BloodlustTrack =
+        [
+            new(1, 1),
+            new(1, 1, BloodlustEffect.DreadUp),
+            new(1, 2, BloodlustEffect.DreadUp),
+            new(2, 2, BloodlustEffect.DreadUp),
+            new(2, 2, BloodlustEffect.DreadUp),
+            new(2, 2, BloodlustEffect.Frenzy),
+            new(2, 2, BloodlustEffect.DreadUp),
+            new(2, 3, BloodlustEffect.DreadUp),
+            new(3, 3, BloodlustEffect.DreadUp),
+            new(3, 3, BloodlustEffect.DreadUp),
+            new(3, 3),
+        ],
+        ItemNames = ["Tyre Iron", "Steak Knife", "Flashlight", "Extension Cord", "Road Flare", "First-Aid Kit", "Horseshoe Magnet", "Door Chain"],
+        EventNames =
+        [
+            ("The Night Clerk", "\"I've seen it too. I know where it goes when it's not on screen.\""),
+            ("Watched It Twice", "He can't stop shaking. He can barely stand."),
+            ("Vending Machine", "It drops a can of soda and a candy bar, free."),
+            ("Lost Property", "A box behind the front desk, full of other people's things."),
+            ("Dead Air", "For one whole minute, every screen shows nothing."),
+            ("Station Coffee", "Burnt, bitter and very, very strong."),
+            ("Rewired Socket", "Bare wires, and a puddle in front of the door."),
+            ("Tour Bus", "A coach pulls in for the night. Its passengers have no idea."),
+            ("Your Face on Screen", "On every set in the lot, for one long second."),
+            ("Power Cut", "The neon sign dies. Only the TVs keep glowing."),
+            ("He's Tuned In", "Your picture, on his screen, getting closer."),
+            ("Channel Change", "A guest in another room just changed the channel."),
+        ],
+        TideNames =
+        [
+            ("Test Card", "A tone, a pattern of colour bars, and footsteps."),
+            ("Now Showing", "Every set in the motel shows the same room."),
+            ("Your Face", "His screen shows you, from behind."),
+            ("Late Night Movie", "The film is about the guests. It doesn't end well."),
+            ("Snow", "Static fills the air like falling snow."),
+            ("Check-In", "A car pulls in. A tired family heads for the office."),
+            ("Tower Light", "The red light on the tower stops blinking and stays on."),
+            ("Tuning In", "He has found your frequency."),
+            ("Commercial Break", "Thirty seconds of a jingle about orange juice. Breathe."),
+            ("Close-Up", "His screen fills with your eye."),
+            ("Prime Time", "Ratings are everything tonight."),
+            ("Channel Surfing", "He steps out of whichever screen has the most people round it."),
+            ("Vacancy", "Someone wanders over from the highway, looking for a room."),
+            ("Bad Reception", "Your watch, your radio, your heartbeat, all wrong."),
+            ("Rerun", "His cracked screen flickers, and the picture comes back whole."),
+            ("Rolling Picture", "Everything slides up and up and up."),
+            ("Broadcast", "The signal is stronger now."),
+            ("Off the Air", "Every screen goes black at once."),
+        ],
+    };
+
+    // ================================================================== Ashgrove House (the collector's puzzle house)
+
+    public static ScenarioDef Ashgrove { get; } = new()
+    {
+        Id = "ashgrove",
+        Title = "Ashgrove House",
+        Place = "Ashgrove House",
+        Tagline = "Some things should stay locked.",
+        Blurb = "A sealed country house full of locked doors. You were valuing the contents when you opened a little lacquered cabinet. Every door in the house locked itself, and somebody started collecting.",
+        Intro = "Ashgrove House, the night the cabinet opened. Get the heirs to the Foyer, find the keys, and close the Curator's collection for good.",
+        Survivor = new("Clara Voss", "Clara", "Estate valuer",
+            "Hired to value the contents of Ashgrove. Opened a lacquered cabinet of seven tiny drawers. Really wishes she hadn't."),
+        Killer = new("The Curator", "Curator", "He", "him",
+            "Tall and gaunt, in a velvet coat the colour of old wine. His face is porcelain, cracked and mended with gold. He collects people.", HealthBonus: 4),
+        Victim = "heir", Victims = "heirs",
+        RoundWord = "chime",
+        DeckName = "Exhibit card",
+        PhaseBanner = "EVERY CLOCK STRIKES",
+        FinaleName = "Final Exhibit",
+        FinaleFlavour = "The house folds in on itself. Every corridor leads to his gallery.",
+        FinaleTakes = "The house swallows the rest of the family",
+        FinaleBannerSub = "The house has closed. Now he hunts only you.",
+        ClaimText = "adds {0} to his collection",
+        MoveVerb = "walks", LingerVerb = "admires the room",
+        RiseText = "steps out from behind a portrait",
+        NobodyThere = "He finds only dust sheets, and is gone.",
+        BarredRise = "A portrait shudders on the wall, but the wedged door holds.",
+        BarredDoor = "He tries the handle, once, and smiles.",
+        BarricadeText = "You wedge the door with a candlestick.",
+        LureText = "You slide open one of the cabinet's tiny drawers.",
+        RepelText = "The silver bell rings, clear and bright, and he cannot abide it.",
+        RepelUse = "You ring the silver bell; he flinches from the sound.",
+        WinText = "The last tiny drawer clicks shut. Ashgrove is only a house again.",
+        LoseText = "A new portrait hangs in the gallery. It looks a lot like you.",
+        FogName = "Dust",
+        Locations =
+        [
+            new(0, "Foyer", "The front doors stand open on the night. Heirs brought here can run for the gates.", 400, 490, false, true, 0, [ItemKind.Key]),
+            new(1, "Grand Hall", "A cold fireplace and a staircase that has too many steps.", 400, 318, false, false, 2, [ItemKind.Rope, ItemKind.Bandages]),
+            new(2, "Library", "Ladders on rails, and a book that keeps falling open at the same page.", 150, 385, false, false, 2, [ItemKind.Lantern, ItemKind.IronNails]),
+            new(3, "Dining Room", "Places laid for thirteen. Twelve chairs.", 650, 318, false, false, 2, [ItemKind.GuttingKnife, ItemKind.Key]),
+            new(4, "Conservatory", "Glass, dead orchids and a fountain full of black water.", 150, 160, false, false, 0, [ItemKind.BlessedSalt, ItemKind.Bandages]),
+            new(5, "Gallery", "Portraits of the family. Some of them are new.", 400, 128, false, false, 0, [ItemKind.FlareGun, ItemKind.BoatHook]),
+            new(6, "Attic", "Dust sheets over shapes that are almost people.", 655, 140, true, false, 0, [ItemKind.BlessedSalt, ItemKind.FlareGun]),
+            new(7, "Cellar", "Wine racks, a furnace, and a door that wasn't there yesterday.", 655, 488, true, false, 1, [ItemKind.Bandages, ItemKind.Key]),
+        ],
+        Edges = [(0, 1), (0, 2), (0, 7), (1, 2), (1, 3), (1, 5), (2, 4), (4, 5), (5, 6), (3, 6), (3, 7)],
+        LockedEdges = [(1, 5), (2, 4), (3, 6)],
+        KeyName = "Brass Key",
+        SanctuaryId = 0,
+        KillerStart = 7,
+        SummonId = 5,
+        StartDread = 2,
+        BloodlustTrack =
+        [
+            new(1, 1),
+            new(1, 2, BloodlustEffect.DreadUp),
+            new(1, 2, BloodlustEffect.DreadUp),
+            new(2, 2, BloodlustEffect.DreadUp),
+            new(2, 2, BloodlustEffect.DreadUp),
+            new(2, 2, BloodlustEffect.Frenzy),
+            new(2, 3, BloodlustEffect.DreadUp),
+            new(2, 3, BloodlustEffect.DreadUp),
+            new(2, 3, BloodlustEffect.DreadUp),
+            new(3, 3, BloodlustEffect.DreadUp),
+            new(3, 3),
+        ],
+        ItemNames = ["Fire Poker", "Letter Opener", "Candelabra", "Bell Rope", "Flintlock Pistol", "Smelling Salts", "Silver Bell", "Door Wedge"],
+        EventNames =
+        [
+            ("The Youngest Heir", "\"I used to play hide and seek here. I know every passage.\""),
+            ("Twisted Ankle", "She fell on the stairs. They moved."),
+            ("Brandy", "A crystal decanter, still half full."),
+            ("Hidden Drawer", "A click, and the panelling slides aside."),
+            ("Grandfather's Letter", "\"If you are reading this, it has opened. Ring the bell.\""),
+            ("Second Wind", "Fear turns to anger. Anger turns to speed."),
+            ("Mantrap", "An antique, but it still works."),
+            ("Late Arrivals", "Three more cousins, come for the reading of the will."),
+            ("The Clock Stops", "Every clock in the house stops at the same second."),
+            ("Candles Gutter", "The draught comes from inside the walls."),
+            ("He Has Your Measure", "He has seen you. He wants you for the collection."),
+            ("A New Exhibit", "Another portrait appears in the gallery."),
+        ],
+        TideNames =
+        [
+            ("Acquisition", "Polished shoes on polished boards."),
+            ("The Catalogue", "He turns a page. Every heir's name is written there."),
+            ("Your Portrait", "Someone has begun painting your portrait."),
+            ("The Reading of the Will", "\"To my family, I leave... myself.\""),
+            ("Dust Sheets", "The air is grey with dust."),
+            ("Unexpected Guest", "A cousin wanders in, lost in the corridors."),
+            ("The Gallery", "A new frame on the gallery wall. It's empty, for now."),
+            ("Rare Specimen", "He's decided you would complete the set."),
+            ("Morning Room", "Pale light through the curtains. A moment's peace."),
+            ("Glass Case", "Your reflection in the glass isn't alone."),
+            ("Private Collection", "He is not a patient collector tonight."),
+            ("Viewing", "He steps out of a portrait wherever the family gathers."),
+            ("Lost in the House", "A heir stumbles out of a corridor that wasn't there before."),
+            ("Draught", "Cold air from the walls. Your fingers stiffen."),
+            ("Restoration", "He sits, and mends the gold seam in his face."),
+            ("Candlelight", "The candles all gutter at once."),
+            ("Provenance", "He knows where every heir came from, and where they'll go."),
+            ("Into the Walls", "He steps back into the panelling and is gone."),
         ],
     };
 }

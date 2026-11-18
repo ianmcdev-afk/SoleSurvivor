@@ -301,6 +301,25 @@ internal static partial class Art
         land.Freeze();
         scene.Children.Add(new Rectangle { Width = width, Height = height, Fill = land });
 
+        if (theme.Indoor)
+        {
+            // Floorboards: long planks with staggered joints, instead of grass and stones.
+            var boards = new System.Text.StringBuilder();
+            var joints = new System.Text.StringBuilder();
+            var r = new Random(11);
+            for (double y = 0; y < height; y += 12)
+            {
+                boards.Append($"M0,{y:F0} H{width:F0} ");
+                for (double x = r.Next(0, 90); x < width; x += 70 + r.Next(0, 60))
+                    joints.Append($"M{x:F0},{y:F0} v12 ");
+            }
+            scene.Children.Add(P(boards.ToString(), "none", theme.Tufts, 1).Also(e => e.Opacity = 0.7));
+            scene.Children.Add(P(joints.ToString(), "none", theme.Stones, 1).Also(e => e.Opacity = 0.8));
+            DrawSceneryGroup(scene, "ground", scenarioId);
+            DrawSceneryGroup(scene, "top", scenarioId);
+            return;
+        }
+
         var rng = new Random(7);
         var tufts = new System.Text.StringBuilder();
         var stones = new System.Text.StringBuilder();

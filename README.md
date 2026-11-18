@@ -1,14 +1,19 @@
 # Sole Survivor
 
-A solo, turn-based horror board game for Windows (WPF / .NET 8). You use dice, action cards, a Horror track, a killer deck with a Bloodlust killer board, event cards, and a finale, across three original scenarios:
+A solo, turn-based horror board game for Windows (WPF / .NET 8). You use dice, action cards, a Horror track, a killer deck with a Bloodlust killer board, event cards, and a finale, across six original scenarios:
 
 | Scenario | Survivor | Killer | Rescue | Safe place |
 |---|---|---|---|---|
 | **Gallowmouth** (a coastal village) | Wren Calloway, the keeper's daughter | The Tidewife | villagers | Lighthouse |
 | **Whitepine** (a snowbound national park) | Dana Okafor, park ranger | The Hollow Stag | campers | Ranger Station |
 | **St Agnes** (a derelict asylum) | Eli Marsh, urban explorer | The Matron | explorers | Gatehouse |
+| **Larkspur Lane** (a suburb where sleep kills) | Maya Castillo, insomniac | The Lullaby Man | sleepers | All-Night Diner |
+| **Kestrel Motel** (a roadside motel and a cursed broadcast) | Ruth Abernathy, local reporter | The Presenter | guests | Gas Station |
+| **Ashgrove House** (a sealed country house) | Clara Voss, estate valuer | The Curator | heirs | Foyer |
 
-The game opens on a title screen with Continue, New game, Options, How to play and Quit. New game leads to a scenario-select screen, and Esc pauses during play. There's sound throughout: effects for dice, cards, footsteps, the killer and the finale, plus an ambient loop per scenario (sea, wind, rain). Mute with the header button or M. Options (default difficulty, animation speed, volume, ambient sound, weather and ambient effects, hints, full screen, window size) are saved to `%AppData%\SoleSurvivor\settings.json`. The full rules are in the in-game **How to play** window, worded for the scenario you're playing.
+Larkspur Lane, the Kestrel Motel and Ashgrove House add **locked doors** (which need a key and block everyone, including the killer) and, outdoors, a **vehicle** (bicycle or station wagon) that moves you 2 or 3 spaces at a time.
+
+The game opens on a title screen with Continue, New game, Options, How to play and Quit. New game leads to a scenario-select screen, then an objective briefing with a map of where to bring people to safety (reopen it any time with the Objective button), and Esc pauses during play. There's sound throughout: effects for dice, cards, footsteps, the killer and the finale, plus an ambient loop per scenario (sea, wind, rain, a distant music box, TV hum, a ticking clock) and a killer-turn sting for each of the new places. Mute with the header button or M. Options (default difficulty, animation speed, volume, ambient sound, weather and ambient effects, hints, full screen, window size) are saved to `%AppData%\SoleSurvivor\settings.json`. The full rules are in the in-game **How to play** window, worded for the scenario you're playing.
 
 ## Run it
 
@@ -27,7 +32,7 @@ In Visual Studio, you can instead right-click SoleSurvivor.App, choose **Publish
 
 ```powershell
 .\publish.ps1 -Installer
-# -> installer\Output\SoleSurvivor-Setup-1.0.15.exe
+# -> installer\Output\SoleSurvivor-Setup-1.0.23.exe
 ```
 
 The installer is per-user by default (no admin needed). It adds a Start-menu shortcut, an optional desktop icon and an uninstaller. The version comes from `Directory.Build.props`.

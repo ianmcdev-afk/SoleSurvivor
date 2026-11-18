@@ -21,8 +21,18 @@ public partial class MainWindow
 
     // ------------------------------------------------------------------ show / hide
 
+    /// <summary>"Six nights. Six horrors." — counted from the scenario list, so it stays right when nights are added.</summary>
+    private static string TitleLine()
+    {
+        string[] words = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve"];
+        int n = Scenarios.All.Count;
+        string w = n < words.Length ? words[n] : n.ToString();
+        return n == 1 ? "One night. One horror. Only one of you walks out." : $"{w} nights. {w} horrors. Only one of you walks out.";
+    }
+
     private void ShowMenu(MenuPage page)
     {
+        TitleTagline.Text = TitleLine();
         if (page == MenuPage.Options && _menuPage != MenuPage.Options) _optionsReturn = MenuOpen ? _menuPage : MenuPage.Pause;
         _menuPage = page;
         MenuOverlay.Visibility = Visibility.Visible;
@@ -178,12 +188,12 @@ public partial class MainWindow
             bool selected = sc == _pickScenario;
             var theme = Art.ThemeFor(sc.Id);
 
-            var art = new Grid { Height = 150 };
+            var art = new Grid { Height = 104 };
             art.ColumnDefinitions.Add(new ColumnDefinition());
             art.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             art.ColumnDefinitions.Add(new ColumnDefinition());
-            var you = new Viewbox { Child = Art.Survivor(sc.Id).Root, Height = 112, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 0, 10) };
-            var them = new Viewbox { Child = Art.Killer(sc.Id).Root, Height = 134, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 0, 8) };
+            var you = new Viewbox { Child = Art.Survivor(sc.Id).Root, Height = 76, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 0, 8) };
+            var them = new Viewbox { Child = Art.Killer(sc.Id).Root, Height = 94, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 0, 6) };
             var vs = new TextBlock { Text = "vs", FontFamily = new FontFamily("Georgia"), FontStyle = FontStyles.Italic, FontSize = 18, Foreground = Art.Dim, VerticalAlignment = VerticalAlignment.Center };
             Grid.SetColumn(vs, 1);
             Grid.SetColumn(them, 2);
@@ -197,14 +207,13 @@ public partial class MainWindow
                 ClipToBounds = true,
                 Background = new LinearGradientBrush(Art.C(theme.LandTop), Art.C(theme.Board), 90),
                 Child = art,
-                Margin = new Thickness(0, 0, 0, 12)
+                Margin = new Thickness(0, 0, 0, 8)
             };
 
             var body = new StackPanel();
             body.Children.Add(artFrame);
-            body.Children.Add(new TextBlock { Text = sc.Title, FontFamily = new FontFamily("Georgia"), FontSize = 26, FontWeight = FontWeights.Bold, Foreground = Art.Warm });
-            body.Children.Add(new TextBlock { Text = sc.Tagline, FontFamily = new FontFamily("Georgia"), FontStyle = FontStyles.Italic, FontSize = 13.5, Foreground = Art.Dim, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 2, 0, 8) });
-            body.Children.Add(new TextBlock { Text = sc.Blurb, TextWrapping = TextWrapping.Wrap, FontSize = 12.5, Margin = new Thickness(0, 0, 0, 10), Height = 54 });
+            body.Children.Add(new TextBlock { Text = sc.Title, FontFamily = new FontFamily("Georgia"), FontSize = 22, FontWeight = FontWeights.Bold, Foreground = Art.Warm });
+            body.Children.Add(new TextBlock { Text = sc.Tagline, FontFamily = new FontFamily("Georgia"), FontStyle = FontStyles.Italic, FontSize = 12.5, Foreground = Art.Dim, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 1, 0, 6) });
             var who = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 12.5, Margin = new Thickness(0, 0, 0, 4) };
             who.Inlines.Add(new System.Windows.Documents.Run("You  ") { Foreground = Art.Dim });
             who.Inlines.Add(new System.Windows.Documents.Run(sc.Survivor.Name) { Foreground = Art.Accent, FontWeight = FontWeights.Bold });
@@ -214,24 +223,29 @@ public partial class MainWindow
             foe.Inlines.Add(new System.Windows.Documents.Run("Hunted by  ") { Foreground = Art.Dim });
             foe.Inlines.Add(new System.Windows.Documents.Run(sc.Killer.Name) { Foreground = Art.Danger, FontWeight = FontWeights.Bold });
             body.Children.Add(foe);
+            // Map features worth knowing before you pick: locked doors, a vehicle, indoors.
+            var features = new List<string>();
+            if (theme.Indoor) features.Add("Indoors");
+            if (sc.LockedEdges.Length > 0) features.Add(sc.LockedEdges.Length == 1 ? "1 locked door" : $"{sc.LockedEdges.Length} locked doors");
+            if (sc.VehicleName is not null) features.Add($"{sc.VehicleName} (moves {sc.VehicleRange})");
             body.Children.Add(new TextBlock
             {
-                Text = $"Lead the {sc.Victims} to the {sc.SanctuaryName}.",
-                FontSize = 12, Foreground = Art.Dim, TextWrapping = TextWrapping.Wrap
+                Text = $"Lead the {sc.Victims} to the {sc.SanctuaryName}." + (features.Count > 0 ? "\n" + string.Join("  ·  ", features) : ""),
+                FontSize = 12, Foreground = features.Count > 0 ? Art.Accent : Art.Dim, TextWrapping = TextWrapping.Wrap
             });
 
             var card = new Button
             {
                 Style = (Style)FindResource("ActionButton"),
-                Width = 320,
-                Margin = new Thickness(10, 0, 10, 0),
-                Padding = new Thickness(14),
+                Width = 360,
+                Margin = new Thickness(8, 0, 8, 14),
+                Padding = new Thickness(12, 10, 12, 10),
                 HorizontalContentAlignment = HorizontalAlignment.Stretch,
                 Background = selected ? Art.Hex("#1E2E2A") : Art.Hex("#121E22"),
                 BorderBrush = selected ? Art.Warm : Art.Edge,
                 BorderThickness = new Thickness(selected ? 3 : 1),
                 Content = body,
-                ToolTip = $"{sc.Survivor.Bio}\n\n{sc.Killer.Name}: {sc.Killer.Bio}"
+                ToolTip = $"{sc.Blurb}\n\n{sc.Survivor.Name}: {sc.Survivor.Bio}\n\n{sc.Killer.Name}: {sc.Killer.Bio}"
             };
             if (selected)
                 card.Effect = new DropShadowEffect { Color = Art.C("#E8C26A"), BlurRadius = 24, ShadowDepth = 0, Opacity = 0.55 };

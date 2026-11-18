@@ -57,6 +57,9 @@ internal static class Sound
         }
     }
 
+    /// <summary>True if a sound of that name was shipped (and extracted).</summary>
+    public static bool Has(string name) => Available && _dir.Length > 0 && File.Exists(Path.Combine(_dir, name + ".wav"));
+
     /// <summary>Play a one-shot effect by name (file name without .wav), at a relative volume.</summary>
     public static void Play(string name, double volume = 1.0)
     {
