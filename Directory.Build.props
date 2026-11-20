@@ -1,8 +1,8 @@
 <Project>
   <PropertyGroup>
-    <Version>1.0.30</Version>
+    <Version>1.0.32</Version>
     <Product>Sole Survivor</Product>
-    <Company>Ian</Company>
+    <Company>kingtreelo</Company>
     <Copyright>Copyright © 2026</Copyright>
     <LangVersion>12.0</LangVersion>
     <Nullable>enable</Nullable>

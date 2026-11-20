@@ -1,5 +1,19 @@
 # Sole Survivor: handover
 
+> **Android:** the port is being done in a separate chat. See `ANDROID_PORT.md` for the brief and the ownership split (this Windows line owns `SoleSurvivor.Core`).
+
+## Status: v1.0.32 (Publisher is kingtreelo)
+- The installer's `AppPublisher` and `Directory.Build.props` `<Company>` change from "Ian" to **kingtreelo**.
+- `update-install.ps1` takes `-Publisher` (passed as `$(Company)`) and updates the `Publisher` value in the uninstall key, so an existing install shows the new publisher after the next publish, without running Setup.
+
+## v1.0.31 (Hand limit 10)
+- `Game.HandLimit` is 7 → **10** (as in Final Girl). The UI reads it from the constant; the rules text says "10 cards at most".
+- **Rebalance:** the bigger hand made every scenario about 10 points easier.
+  - Killer base health per difficulty: Easy 20 → 23, Normal 23 → 27, Hard 25 → 29.
+  - Larkspur Lane HealthBonus 3 → 6; Kestrel Motel 4 → 6.
+- **Win rates, 1500 games:** Easy 83–94%, Normal 64–78%, Hard 43–56%. Fuzz errors 0.
+- **For the Android chat:** this changes `SoleSurvivor.Core` (`Game.cs`, `Scenarios.cs`), so copy Core across.
+
 ## Status: v1.0.30 (Version in the window title)
 - The window title now includes the version ("Sole Survivor 1.0.30: Merriwick (Normal)"), as well as the title screen. A small change, made to test that Setup and publishing upgrade the existing install in place.
 
@@ -60,7 +74,7 @@
   | Crowhurst Farm | 81.8% | 64.3% | 46.5% |
 
   Fuzz errors: 0. Easy is a little softer and Hard a little kinder than before (~35%); further tuning is a knob turn (`TimePerRound` / killer health).
-- **Note:** the 7-card hand limit is tight with six starting basics (Final Girl uses 10). It's kept at 7 as requested.
+- **Note:** the hand limit was 7 here; raised to 10 in v1.0.31.
 
 ## v1.0.24 (Three more scenarios: Cedar Hollow, Holloway Funfair, Crowhurst Farm)
 - **New scenarios:** originals inspired by Scream, Terrifier and Misery. No film characters, names or signature looks are used.

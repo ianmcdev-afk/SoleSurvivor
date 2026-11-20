@@ -36,7 +36,7 @@ In Visual Studio, you can instead right-click SoleSurvivor.App, choose **Publish
 
 ```powershell
 .\publish.ps1 -Installer
-# -> installer\Output\SoleSurvivor-Setup-1.0.30.exe
+# -> installer\Output\SoleSurvivor-Setup-1.0.32.exe
 ```
 
 If Sole Survivor is already installed on the PC, every publish (Visual Studio's Publish button or `publish.ps1`) also copies the new exe over the installed copy, so you don't need to run the new Setup. It won't touch a running game or an install it has no permission to write to, and it tells you why in the build output. Turn it off with `.\publish.ps1 -NoInstallUpdate` or `-p:UpdateInstall=false`.

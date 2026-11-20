@@ -96,7 +96,7 @@ public sealed class Game
     public const int MaxDread = 8;
 
     public const int FinaleHealthBonus = 3;
-    public const int HandLimit = 7;
+    public const int HandLimit = 10;
     /// <summary>Time gained by discarding a card from your hand.</summary>
     public const int DiscardRefund = 1;
     /// <summary>In the finale the killer hunts harder than the board says: +1 move and +1 damage.</summary>
@@ -258,9 +258,9 @@ public sealed class Game
         Difficulty = difficulty;
         (TimePerRound, SurvivorMaxHealth, TidewifeStartHealth) = difficulty switch
         {
-            Difficulty.Easy => (6, 6, 20),
-            Difficulty.Hard => (4, 5, 25),
-            _ => (5, 5, 23)
+            Difficulty.Easy => (6, 6, 23),
+            Difficulty.Hard => (4, 5, 29),
+            _ => (5, 5, 27)
         };
         TidewifeStartHealth += Scenario.Killer.HealthBonus;
         Time = TimePerRound;

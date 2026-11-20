@@ -24,7 +24,7 @@
       <_PublishedExe>$([System.IO.Path]::GetFullPath('$(PublishDir)$(AssemblyName).exe'))</_PublishedExe>
       <_UpdateScript>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\tools\update-install.ps1'))</_UpdateScript>
     </PropertyGroup>
-    <Exec Command="powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;$(_UpdateScript)&quot; -Exe &quot;$(_PublishedExe)&quot; -Version &quot;$(Version)&quot;"
+    <Exec Command="powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;$(_UpdateScript)&quot; -Exe &quot;$(_PublishedExe)&quot; -Version &quot;$(Version)&quot; -Publisher &quot;$(Company)&quot;"
           ContinueOnError="true" />
   </Target>
 </Project>

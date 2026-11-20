@@ -7,7 +7,8 @@
 # and needs admin rights, it says so and leaves it alone. It never fails the build.
 param(
     [Parameter(Mandatory = $true)][string]$Exe,
-    [string]$Version = ''
+    [string]$Version = '',
+    [string]$Publisher = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -74,6 +75,7 @@ try {
                 if ($name -match '^Sole Survivor version ') {
                     Set-ItemProperty -LiteralPath $install.Key -Name DisplayName -Value "Sole Survivor version $Version"
                 }
+                if ($Publisher) { Set-ItemProperty -LiteralPath $install.Key -Name Publisher -Value $Publisher }
             } catch {
                 Say "Updated the exe, but couldn't update the version shown in Settings > Apps (needs admin)." 'Yellow'
             }

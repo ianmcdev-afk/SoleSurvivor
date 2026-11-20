@@ -1,14 +1,14 @@
 ; Inno Setup 6 script for Sole Survivor. Run via ..\publish.ps1 -Installer (passes AppVersion),
 ; or compile directly after publishing.
 #ifndef AppVersion
-  #define AppVersion "1.0.30"
+  #define AppVersion "1.0.32"
 #endif
 
 [Setup]
 AppId={{91792052-73D7-4F65-A185-2A01BD78DE90}
 AppName=Sole Survivor
 AppVersion={#AppVersion}
-AppPublisher=Ian
+AppPublisher=kingtreelo
 DefaultDirName={autopf}\Sole Survivor
 DefaultGroupName=Sole Survivor
 DisableProgramGroupPage=yes
